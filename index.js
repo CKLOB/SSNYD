@@ -1,6 +1,6 @@
 // 1. 주요 클래스 가져오기
 const { Client, Events, GatewayIntentBits } = require('discord.js');
-const { token } = require('./config.json');
+const token = process.env.DISCORD_TOKEN;
 
 // 2. 클라이언트 객체 생성 (Guilds관련, 메시지관련 인텐트 추가)
 const client = new Client({ intents: [
@@ -17,7 +17,7 @@ console.log(`Ready! Logged in as ${readyClient.user.tag}`);
 // 4. 급식 명령어 처리 (!급식, !밥, !ㅂ, !ㄱㅅ)
 // ──────────────────────────────────────────────────
 // ※ 나이스 오픈API 설정 (직접 입력하세요)
-const NEIS_API_KEY = 'c11ea26f8c614f50bd7b19d2f3228e6d';  // 나이스 오픈API 인증키
+const NEIS_API_KEY = process.env.NEIS_API_KEY || 'c11ea26f8c614f50bd7b19d2f3228e6d';  // 나이스 오픈API 인증키
 const ATPT_CODE    = 'F10';                // 광주광역시교육청 코드
 const SCHOOL_CODE  = '7380112';   // 광주소프트웨어마이스터고 학교코드 (나이스에서 확인)
 // ──────────────────────────────────────────────────
