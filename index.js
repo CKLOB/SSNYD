@@ -1,4 +1,4 @@
-const { Client, Events, GatewayIntentBits } = require('discord.js');
+const { Client, Events, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const token = process.env.DISCORD_TOKEN;
 
 const client = new Client({ intents: [
@@ -153,7 +153,12 @@ client.on('messageCreate', async (message) => {
     try {
         const result = await fetchMeal(dateStr, mealType);
         if (result) {
-            message.reply(`🍽️ **${dayLabel} ${MEAL_LABELS[mealType]} 급식**\n\n${result.menu}\n\n${result.cal}`);
+            const embed = new EmbedBuilder()
+                .setColor(0x3B82F6)
+                .setTitle(`🍽️ ${dayLabel} ${MEAL_LABELS[mealType]} 급식`)
+                .setDescription(result.menu)
+                .setFooter({ text: result.cal });
+            message.reply({ embeds: [embed] });
         } else {
             message.reply(`😢 ${dayLabel} ${MEAL_LABELS[mealType]} 급식 정보가 없습니다.`);
         }
