@@ -230,6 +230,12 @@ function bacHandVal(hand) {
     return hand.reduce((s, c) => s + bacVal(c), 0) % 10;
 }
 
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function cardStr(cards) {
+    return cards.map(c => `${c.s}${c.v}`).join('  ');
+}
+
 function runBaccarat() {
     const deck   = createDeck();
     const player = [deck.pop(), deck.pop()];
@@ -256,7 +262,7 @@ function runBaccarat() {
     bVal = bacHandVal(banker);
     pVal = bacHandVal(player);
     const winner = pVal > bVal ? 'player' : bVal > pVal ? 'banker' : 'tie';
-    return { pVal, bVal, winner };
+    return { player, banker, pVal, bVal, winner };
 }
 
 async function handleBaccarat(message, args) {
@@ -267,8 +273,8 @@ async function handleBaccarat(message, args) {
     const uid = message.author.id;
     const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`bac_player_${uid}_${amount}`).setLabel('플레이어').setEmoji('👤').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`bac_tie_${uid}_${amount}`).setLabel('타이').setEmoji('🤝').setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId(`bac_banker_${uid}_${amount}`).setLabel('뱅커').setEmoji('🏦').setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`bac_tie_${uid}_${amount}`).setLabel('무승부').setEmoji('🤝').setStyle(ButtonStyle.Success),
     );
 
     const embed = new EmbedBuilder()
@@ -295,11 +301,11 @@ async function handleBaccaratButton(interaction) {
         });
 
     updateBalance(userId, -amount);
-    const { pVal, bVal, winner } = runBaccarat();
+    const { player, banker, pVal, bVal, winner } = runBaccarat();
 
-    const isTie       = winner === 'tie';
-    const userWin     = side === winner;
-    const sideLabel   = { player: '👤 플레이어', banker: '🏦 뱅커', tie: '🤝 무승부' }[side];
+    const isTie     = winner === 'tie';
+    const userWin   = side === winner;
+    const sideLabel = { player: '👤 플레이어', banker: '🏦 뱅커', tie: '🤝 타이' }[side];
 
     let delta;
     if (isTie && side === 'tie') {
@@ -316,19 +322,71 @@ async function handleBaccaratButton(interaction) {
     }
 
     const updated    = getUser(userId, interaction.user.username);
-    const resultText = isTie ? (side === 'tie' ? '🎉 무승부 적중!' : '🤝 무승부 (베팅 반환)') : userWin ? '🎉 승리!' : '😔 패배';
+    const resultText = isTie ? (side === 'tie' ? '🎉 타이 적중!' : '🤝 타이 (베팅 반환)') : userWin ? '🎉 승리!' : '😔 패배';
+    const resultColor = userWin || (isTie && side === 'tie') ? 0x22C55E : isTie ? 0x6B7280 : 0xEF4444;
 
-    const embed = new EmbedBuilder()
-        .setColor(userWin || (isTie && side === 'tie') ? 0x22C55E : isTie ? 0x6B7280 : 0xEF4444)
-        .setTitle('🎴 바카라')
-        .addFields(
-            { name: '내 베팅',   value: sideLabel,                                  inline: true  },
-            { name: '결과',      value: `플레이어 **${pVal}** vs 뱅커 **${bVal}**`, inline: true  },
-            { name: '판정',      value: resultText,                                 inline: false },
-            { name: '손익',      value: fmt(delta),                                 inline: true  },
-            { name: '현재 잔액', value: `${updated.balance.toLocaleString()}원`,    inline: true  }
-        );
-    interaction.update({ embeds: [embed], components: [] });
+    // 애니메이션: 카드 배분 → 플레이어 공개 → 뱅커 공개 → 결과
+    await interaction.deferUpdate();
+
+    await interaction.editReply({
+        embeds: [new EmbedBuilder()
+            .setColor(0x3B82F6)
+            .setTitle('🎴 바카라')
+            .setDescription('🂠  🂠  카드를 배분하고 있습니다...\n🂠  🂠')],
+        components: []
+    });
+    await sleep(800);
+
+    await interaction.editReply({
+        embeds: [new EmbedBuilder()
+            .setColor(0x3B82F6)
+            .setTitle('🎴 바카라')
+            .addFields(
+                { name: '👤 플레이어', value: cardStr(player.slice(0, 1)) + '  🂠', inline: true },
+                { name: '🏦 뱅커',     value: cardStr(banker.slice(0, 1)) + '  🂠', inline: true }
+            )]
+    });
+    await sleep(800);
+
+    await interaction.editReply({
+        embeds: [new EmbedBuilder()
+            .setColor(0x3B82F6)
+            .setTitle('🎴 바카라')
+            .addFields(
+                { name: '👤 플레이어', value: `${cardStr(player.slice(0, 2))}  **(${bacHandVal(player.slice(0, 2))})**`, inline: true },
+                { name: '🏦 뱅커',     value: `${cardStr(banker.slice(0, 2))}  **(${bacHandVal(banker.slice(0, 2))})**`, inline: true }
+            )
+            .setFooter({ text: player.length > 2 || banker.length > 2 ? '3번째 카드 배분 중...' : '결과 집계 중...' })]
+    });
+    await sleep(900);
+
+    if (player.length > 2 || banker.length > 2) {
+        await interaction.editReply({
+            embeds: [new EmbedBuilder()
+                .setColor(0x3B82F6)
+                .setTitle('🎴 바카라')
+                .addFields(
+                    { name: '👤 플레이어', value: `${cardStr(player)}  **(${pVal})**`, inline: true },
+                    { name: '🏦 뱅커',     value: `${cardStr(banker)}  **(${bVal})**`, inline: true }
+                )
+                .setFooter({ text: '결과 집계 중...' })]
+        });
+        await sleep(900);
+    }
+
+    await interaction.editReply({
+        embeds: [new EmbedBuilder()
+            .setColor(resultColor)
+            .setTitle('🎴 바카라')
+            .addFields(
+                { name: '👤 플레이어', value: `${cardStr(player)}  **(${pVal})**`, inline: true },
+                { name: '🏦 뱅커',     value: `${cardStr(banker)}  **(${bVal})**`, inline: true },
+                { name: '내 베팅',     value: sideLabel,                            inline: true },
+                { name: '판정',        value: resultText,                           inline: true },
+                { name: '손익',        value: fmt(delta),                           inline: true },
+                { name: '현재 잔액',   value: `${updated.balance.toLocaleString()}원`, inline: true }
+            )]
+    });
 }
 
 // ─── ROULETTE ────────────────────────────────────────────────────────────────
