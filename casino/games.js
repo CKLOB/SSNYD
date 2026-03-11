@@ -12,16 +12,15 @@ function parseBet(arg, balance) {
   let amount;
 
   if (lower === "올인" || lower === "all") {
-    amount = Math.min(balance, 50000);
+    amount = balance;
   } else if (lower === "반" || lower === "half") {
-    amount = Math.min(Math.floor(balance / 2), 50000);
+    amount = Math.floor(balance / 2);
   } else {
     amount = parseInt(arg);
     if (isNaN(amount)) return { error: "❌ 올바른 베팅 금액을 입력하세요." };
   }
 
   if (amount < 1000) return { error: "❌ 최소 베팅 금액은 1,000원입니다." };
-  if (amount > 50000) return { error: "❌ 최대 베팅 금액은 50,000원입니다." };
   if (amount > balance) return { error: "❌ 잔액이 부족합니다." };
   return { amount };
 }
@@ -573,7 +572,16 @@ const RED_NUMS = new Set([
   1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36,
 ]);
 
-async function handleRoulette(message, args) {
+async function handleRoulette(message) {
+  const embed = new EmbedBuilder()
+    .setColor(0xf59e0b)
+    .setTitle("🎡 룰렛")
+    .setDescription("🔧 현재 룰렛은 **점검중**입니다.\n잠시 후 다시 이용해주세요.");
+  return message.reply({ embeds: [embed] });
+}
+
+/*
+async function handleRouletteOriginal(message, args) {
   const user = getUser(message.author.id, message.author.username);
   const { error, amount } = parseBet(args[0], user.balance);
   if (error) return message.reply(error);
@@ -608,6 +616,7 @@ async function handleRoulette(message, args) {
     );
   message.reply({ embeds: [embed], components: [row] });
 }
+*/
 
 async function handleRouletteButton(interaction) {
   const parts = interaction.customId.split("_");

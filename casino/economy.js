@@ -37,7 +37,7 @@ async function handleAttendance(message) {
 
 async function handleWork(message) {
   const user = getUser(message.author.id, message.author.username);
-  const left = cooldownLeft(user.last_work, 90 * 60 * 1000);
+  const left = cooldownLeft(user.last_work, 90 * 1000);
   if (left) return message.reply(`⏳ **${left}** 후에 다시 일할 수 있습니다.`);
 
   const reward = Math.floor(Math.random() * 4001) + 1000;
