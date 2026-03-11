@@ -1,33 +1,25 @@
-// 1. 주요 클래스 가져오기
 const { Client, Events, GatewayIntentBits } = require('discord.js');
 const token = process.env.DISCORD_TOKEN;
 
-// 2. 클라이언트 객체 생성 (Guilds관련, 메시지관련 인텐트 추가)
 const client = new Client({ intents: [
-    GatewayIntentBits.Guilds, 
+    GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
 ]});
 
-// 3. 봇이 준비됐을때 한번만(once) 표시할 메시지
 client.once(Events.ClientReady, readyClient => {
-console.log(`Ready! Logged in as ${readyClient.user.tag}`);
+    console.log(`Ready! Logged in as ${readyClient.user.tag}`);
 });
 
-// 4. 급식 명령어 처리 (!급식, !밥, !ㅂ, !ㄱㅅ)
-// ──────────────────────────────────────────────────
-// ※ 나이스 오픈API 설정 (직접 입력하세요)
-const NEIS_API_KEY = process.env.NEIS_API_KEY || 'c11ea26f8c614f50bd7b19d2f3228e6d';  // 나이스 오픈API 인증키
-const ATPT_CODE    = 'F10';                // 광주광역시교육청 코드
-const SCHOOL_CODE  = '7380292';   // 광주소프트웨어마이스터고 학교코드 (나이스에서 확인)
-// ──────────────────────────────────────────────────
+const NEIS_API_KEY = process.env.NEIS_API_KEY || 'c11ea26f8c614f50bd7b19d2f3228e6d';
+const ATPT_CODE    = 'F10';
+const SCHOOL_CODE  = '7380292';
 
 const https = require('https');
 
 const MEAL_CMDS   = ['!급식', '!밥', '!ㅂ', '!ㄱㅅ'];
 const MEAL_LABELS = { 1: '아침', 2: '점심', 3: '저녁' };
 
-// 날짜를 YYYYMMDD 형식으로 변환 (KST 기준)
 function toDateStr(kstDate) {
     const y = kstDate.getUTCFullYear();
     const m = String(kstDate.getUTCMonth() + 1).padStart(2, '0');
@@ -35,22 +27,19 @@ function toDateStr(kstDate) {
     return `${y}${m}${d}`;
 }
 
-// 현재 시간(KST)에 따라 어떤 식사를 보여줄지 결정
 function getMealByTime() {
-    const kst  = new Date(Date.now() + 9 * 60 * 60 * 1000); // UTC → KST
-    const h    = kst.getUTCHours();
-    const min  = kst.getUTCMinutes();
-    const t    = h * 60 + min;
+    const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    const h   = kst.getUTCHours();
+    const min = kst.getUTCMinutes();
+    const t   = h * 60 + min;
 
-    if (t < 7 * 60 + 30)   return { type: 1, dateStr: toDateStr(kst), dayLabel: '오늘' };   // ~07:30  → 아침
-    if (t < 12 * 60 + 30)  return { type: 2, dateStr: toDateStr(kst), dayLabel: '오늘' };   // ~12:30  → 점심
-    if (t < 18 * 60 + 30)  return { type: 3, dateStr: toDateStr(kst), dayLabel: '오늘' };   // ~18:30  → 저녁
-    // 18:30 이후 → 내일 아침
+    if (t < 7 * 60 + 30)  return { type: 1, dateStr: toDateStr(kst), dayLabel: '오늘' };
+    if (t < 12 * 60 + 30) return { type: 2, dateStr: toDateStr(kst), dayLabel: '오늘' };
+    if (t < 18 * 60 + 30) return { type: 3, dateStr: toDateStr(kst), dayLabel: '오늘' };
     const tomorrow = new Date(kst.getTime() + 24 * 60 * 60 * 1000);
     return { type: 1, dateStr: toDateStr(tomorrow), dayLabel: '내일' };
 }
 
-// 나이스 API에서 급식 메뉴 가져오기
 function fetchMeal(dateStr, mealType) {
     const url = `https://open.neis.go.kr/hub/mealServiceDietInfo`
               + `?KEY=${NEIS_API_KEY}&Type=json&pIndex=1&pSize=10`
@@ -82,32 +71,82 @@ function fetchMeal(dateStr, mealType) {
     });
 }
 
+let todoSchedule = null;
+
+setInterval(() => {
+    if (!todoSchedule) return;
+    const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    const h   = kst.getUTCHours();
+    const min = kst.getUTCMinutes();
+    if (h === todoSchedule.hour && min === todoSchedule.minute) {
+        const hh = String(todoSchedule.hour).padStart(2, '0');
+        const mm = String(todoSchedule.minute).padStart(2, '0');
+        todoSchedule.channel.send(`# ${hh}:${mm}에 오늘 한거 적으세용`);
+    }
+}, 60 * 1000);
+
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     const content = message.content.trim();
+    const lower   = content.toLowerCase();
 
-    // 급식 명령어인지 확인 (예: !급식, !급식.아침)
+    if (lower.startsWith('!todo.start')) {
+        const suffix = content.slice('!todo.start'.length);
+
+        let hour = 23, minute = 50;
+
+        if (suffix !== '') {
+            const match = suffix.match(/^\((\d{2}):(\d{2})\)$/);
+            if (!match) {
+                message.reply('❌ 형식이 올바르지 않습니다. 예: `!todo.start(23:50)`');
+                return;
+            }
+            hour   = parseInt(match[1]);
+            minute = parseInt(match[2]);
+            if (hour > 23 || minute > 59) {
+                message.reply('❌ 올바른 시간을 입력하세요. (00:00 ~ 23:59)');
+                return;
+            }
+        }
+
+        todoSchedule = { channel: message.channel, hour, minute };
+        const hh = String(hour).padStart(2, '0');
+        const mm = String(minute).padStart(2, '0');
+        message.reply(`✅ 매일 ${hh}:${mm}에 알림을 보낼게요.`);
+        return;
+    }
+
+    if (lower === '!todo.end') {
+        if (!todoSchedule) {
+            message.reply('❌ 실행 중인 알림이 없습니다.');
+        } else {
+            todoSchedule = null;
+            message.reply('✅ 알림을 종료했습니다.');
+        }
+        return;
+    }
+
     const base = MEAL_CMDS.find(c => content === c || content.startsWith(c + '.'));
     if (!base) return;
 
-    const suffix = content.slice(base.length); // '' | '.아침' | '.점심' | '.저녁'
+    const mealSuffix = content.slice(base.length);
 
-    const kst     = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    const kst      = new Date(Date.now() + 9 * 60 * 60 * 1000);
     const todayStr = toDateStr(kst);
 
     let mealType, dayLabel, dateStr;
 
-    if (suffix === '.아침') {
+    if (mealSuffix === '.아침') {
         mealType = 1; dayLabel = '오늘'; dateStr = todayStr;
-    } else if (suffix === '.점심') {
+    } else if (mealSuffix === '.점심') {
         mealType = 2; dayLabel = '오늘'; dateStr = todayStr;
-    } else if (suffix === '.저녁') {
+    } else if (mealSuffix === '.저녁') {
         mealType = 3; dayLabel = '오늘'; dateStr = todayStr;
-    } else if (suffix === '') {
+    } else if (mealSuffix === '') {
         const info = getMealByTime();
         mealType = info.type; dayLabel = info.dayLabel; dateStr = info.dateStr;
     } else {
-        return; // 알 수 없는 서브커맨드
+        return;
     }
 
     try {
@@ -123,5 +162,4 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// 5. 시크릿키(토큰)을 통해 봇 로그인 실행
 client.login(token);
