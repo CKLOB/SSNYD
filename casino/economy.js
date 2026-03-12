@@ -99,6 +99,50 @@ async function handleSupport(message) {
   message.reply({ embeds: [embed] });
 }
 
+async function handleTransfer(message, args) {
+  const mention = message.mentions.users.first();
+  if (!mention) return message.reply("❌ 송금할 대상을 멘션해주세요. 예) `!송금 @이름 10000`");
+  if (mention.id === message.author.id) return message.reply("❌ 자기 자신에게는 송금할 수 없습니다.");
+  if (mention.bot) return message.reply("❌ 봇에게는 송금할 수 없습니다.");
+
+  const amountStr = args[1];
+  if (!amountStr) return message.reply("❌ 송금 금액을 입력하세요. 예) `!송금 @이름 10000`");
+
+  const sender = await getUser(message.author.id, message.author.username);
+  const amount = amountStr.toLowerCase() === "올인" || amountStr.toLowerCase() === "all"
+    ? sender.balance
+    : amountStr.toLowerCase() === "반" || amountStr.toLowerCase() === "half"
+      ? Math.floor(sender.balance / 2)
+      : parseInt(amountStr);
+
+  if (isNaN(amount)) return message.reply("❌ 올바른 금액을 입력하세요.");
+  if (amount < 1000) return message.reply("❌ 최소 송금 금액은 1,000원입니다.");
+  if (amount > sender.balance) return message.reply("❌ 잔액이 부족합니다.");
+
+  const taxRate = Math.floor(Math.random() * 41) + 10; // 10~50%
+  const tax = Math.floor(amount * (taxRate / 100));
+  const received = amount - tax;
+
+  await updateBalance(message.author.id, -amount);
+  await getUser(mention.id, mention.username);
+  await updateBalance(mention.id, received);
+
+  const senderUpdated = await getUser(message.author.id, message.author.username);
+
+  const embed = new EmbedBuilder()
+    .setColor(0x8b5cf6)
+    .setTitle("💸 송금 완료")
+    .addFields(
+      { name: "받는 사람", value: `<@${mention.id}>`, inline: true },
+      { name: "송금액", value: `${amount.toLocaleString()}원`, inline: true },
+      { name: "증여세율", value: `${taxRate}%`, inline: true },
+      { name: "세금", value: `-${tax.toLocaleString()}원`, inline: true },
+      { name: "실수령액", value: `${received.toLocaleString()}원`, inline: true },
+      { name: "내 잔액", value: `${senderUpdated.balance.toLocaleString()}원`, inline: true },
+    );
+  message.reply({ embeds: [embed] });
+}
+
 async function handleRanking(message) {
   const users = await getTopUsers(10);
   const medals = ["🥇", "🥈", "🥉"];
@@ -122,4 +166,5 @@ module.exports = {
   handleBalance,
   handleSupport,
   handleRanking,
+  handleTransfer,
 };

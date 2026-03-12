@@ -4,6 +4,7 @@ const {
   handleBalance,
   handleSupport,
   handleRanking,
+  handleTransfer,
 } = require("./economy");
 const {
   handleCoinflip,
@@ -34,6 +35,9 @@ async function handleCasino(message) {
       return true;
     case "!랭킹":
       await handleRanking(message);
+      return true;
+    case "!송금":
+      await handleTransfer(message, args);
       return true;
     case "!코인":
       await handleCoinflip(message, args);
