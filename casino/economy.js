@@ -1,6 +1,10 @@
 const { EmbedBuilder } = require("discord.js");
 const { getUser, updateBalance, setField, getTopUsers } = require("./db");
 
+function toMysqlDatetime(date) {
+  return date.toISOString().slice(0, 19).replace("T", " ");
+}
+
 function cooldownLeft(lastTime, ms) {
   if (!lastTime) return null;
   const diff = Date.now() - new Date(lastTime).getTime();
@@ -18,7 +22,7 @@ async function handleAttendance(message) {
   if (left) return message.reply(`⏳ **${left}** 후에 출석할 수 있습니다.`);
 
   await updateBalance(message.author.id, 20000);
-  await setField(message.author.id, "last_attendance", new Date().toISOString());
+  await setField(message.author.id, "last_attendance", toMysqlDatetime(new Date()));
   const updated = await getUser(message.author.id, message.author.username);
 
   const embed = new EmbedBuilder()
@@ -42,7 +46,7 @@ async function handleWork(message) {
 
   const reward = Math.floor(Math.random() * 4001) + 1000;
   await updateBalance(message.author.id, reward);
-  await setField(message.author.id, "last_work", new Date().toISOString());
+  await setField(message.author.id, "last_work", toMysqlDatetime(new Date()));
   const updated = await getUser(message.author.id, message.author.username);
 
   const embed = new EmbedBuilder()
@@ -78,7 +82,7 @@ async function handleSupport(message) {
     return message.reply(`⏳ **${left}** 후에 다시 신청할 수 있습니다.`);
 
   await updateBalance(message.author.id, 30000);
-  await setField(message.author.id, "last_support", new Date().toISOString());
+  await setField(message.author.id, "last_support", toMysqlDatetime(new Date()));
   const updated = await getUser(message.author.id, message.author.username);
 
   const embed = new EmbedBuilder()
