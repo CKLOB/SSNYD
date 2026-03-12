@@ -2,6 +2,7 @@ const { Client, Events, GatewayIntentBits } = require("discord.js");
 const { handleCasino, handleButtonInteraction } = require("./casino/handler");
 const { handleMeal } = require("./meal/handler");
 const { handleScheduler, initScheduler } = require("./scheduler/handler");
+const { handleTimetable } = require("./timetable/handler");
 const { init: initDb } = require("./casino/db");
 
 const token = process.env.DISCORD_TOKEN;
@@ -28,6 +29,7 @@ client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
   if (await handleCasino(message)) return;
   if (await handleScheduler(message)) return;
+  if (await handleTimetable(message)) return;
   await handleMeal(message);
 });
 
