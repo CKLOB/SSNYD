@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const DB_PATH = path.join(__dirname, "..", "casino_db.json");
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, "..", "casino_db.json");
 
 function load() {
   if (!fs.existsSync(DB_PATH)) fs.writeFileSync(DB_PATH, "{}", "utf8");
