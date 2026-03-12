@@ -48,7 +48,7 @@ async function handleWork(message) {
   const left = cooldownLeft(user.last_work, 30 * 1000);
   if (left) return message.reply(`⏳ **${left}** 후에 다시 일할 수 있습니다.`);
 
-  const reward = Math.floor(Math.random() * 991) + 10;
+  const reward = Math.floor(Math.random() * 4001) + 1000;
   //const reward = 400000; // 꼼수
   await updateBalance(message.author.id, reward);
   await setField(message.author.id, "last_work", toMysqlDatetime(new Date()));
