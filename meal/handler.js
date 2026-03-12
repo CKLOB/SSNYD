@@ -75,7 +75,7 @@ async function handleMeal(message) {
 
   let mealType, dayLabel, dateStr;
 
-  if (["!밥", "!ㅂ", "!급식", "!ㄱㅅ", "!ㄳ", "/밥"].includes(content)) {
+  if (["!밥", "!ㅂ", "!급식", "!ㄱㅅ", "!ㄳ"].includes(content)) {
     const info = getMealByTime();
     mealType = info.type;
     dayLabel = info.dayLabel;
