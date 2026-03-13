@@ -1,22 +1,8 @@
 const { EmbedBuilder } = require("discord.js");
 const https = require("https");
+const { kstNow, toNeisDateStr, NEIS_KEY, ATPT_CODE, SCHOOL_CODE } = require("../utils");
 
-const NEIS_API_KEY =
-  process.env.NEIS_API_KEY || "c11ea26f8c614f50bd7b19d2f3228e6d";
-const ATPT_CODE = "F10";
-const SCHOOL_CODE = "7380292";
 const GRADE = 2;
-
-function getKST() {
-  return new Date(Date.now() + 9 * 60 * 60 * 1000);
-}
-
-function toDateStr(date) {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
-  return `${y}${m}${d}`;
-}
 
 function getClassFromRoles(member) {
   for (let i = 1; i <= 4; i++) {
@@ -28,7 +14,7 @@ function getClassFromRoles(member) {
 function fetchTimetable(dateStr, classNum) {
   const url =
     `https://open.neis.go.kr/hub/hisTimetable` +
-    `?KEY=${NEIS_API_KEY}&Type=json&pIndex=1&pSize=20` +
+    `?KEY=${NEIS_KEY}&Type=json&pIndex=1&pSize=20` +
     `&ATPT_OFCDC_SC_CODE=${ATPT_CODE}` +
     `&SD_SCHUL_CODE=${SCHOOL_CODE}` +
     `&GRADE=${GRADE}` +
@@ -44,10 +30,7 @@ function fetchTimetable(dateStr, classNum) {
         res.on("end", () => {
           try {
             const json = JSON.parse(raw);
-            if (!json.hisTimetable) {
-              resolve(null);
-              return;
-            }
+            if (!json.hisTimetable) { resolve(null); return; }
             resolve(json.hisTimetable[1].row);
           } catch (e) {
             reject(e);
@@ -59,16 +42,14 @@ function fetchTimetable(dateStr, classNum) {
 }
 
 async function handleTimetable(message) {
-  const content = message.content.trim();
-  if (content !== "!시간표") return false;
+  if (message.content.trim() !== "!시간표") return false;
 
-  const kst = getKST();
+  const kst = kstNow();
   const t = kst.getUTCHours() * 60 + kst.getUTCMinutes();
 
   let targetDate = new Date(kst);
   if (t >= 16 * 60 + 40) targetDate = new Date(kst.getTime() + 24 * 60 * 60 * 1000);
 
-  // 주말이면 다음 월요일로
   while (targetDate.getUTCDay() === 0 || targetDate.getUTCDay() === 6) {
     targetDate = new Date(targetDate.getTime() + 24 * 60 * 60 * 1000);
   }
@@ -79,12 +60,12 @@ async function handleTimetable(message) {
     return true;
   }
 
-  const dateStr = toDateStr(targetDate);
+  const dateStr = toNeisDateStr(targetDate);
 
   try {
     const rows = await fetchTimetable(dateStr, classNum);
     if (!rows || rows.length === 0) {
-      message.reply("😢 오늘 시간표 정보가 없습니다.");
+      message.reply("😢 시간표 정보가 없습니다.");
       return true;
     }
 
