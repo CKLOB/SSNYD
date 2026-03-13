@@ -749,7 +749,7 @@ async function handleRouletteButton(interaction) {
     ],
     components: [],
   });
-  await sleep(4000);
+  await sleep(9000);
 
   await interaction.editReply({
     embeds: [
