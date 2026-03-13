@@ -31,9 +31,8 @@ function fmt(n) {
 
 // ─── COINFLIP ────────────────────────────────────────────────────────────────
 
-const CF_CHANNEL_ID = "1481328528833380454";
-const CF_HEADS_MSG_ID = "1481869842381541376";
-const CF_TAILS_MSG_ID = "1481869857749336085";
+const CF_HEADS_GIF = "https://cdn.discordapp.com/attachments/1481328528833380454/1481872541520892014/202603131311_3.gif";
+const CF_TAILS_GIF = "https://cdn.discordapp.com/attachments/1481328528833380454/1481872528333996154/202603131311_2.gif";
 
 async function handleCoinflip(message, args) {
   const user = await getUser(message.author.id, message.author.username);
@@ -45,12 +44,10 @@ async function handleCoinflip(message, args) {
     new ButtonBuilder()
       .setCustomId(`cf_heads_${uid}_${amount}`)
       .setLabel("앞면")
-      .setEmoji("🪙")
-      .setStyle(ButtonStyle.Primary),
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`cf_tails_${uid}_${amount}`)
       .setLabel("뒷면")
-      .setEmoji("💀")
       .setStyle(ButtonStyle.Secondary),
   );
 
@@ -82,14 +79,7 @@ async function handleCoinflipButton(interaction) {
   await updateBalance(userId, delta);
   const updated = await getUser(userId, interaction.user.username);
 
-  // 결과에 맞는 GIF URL 가져오기
-  let gifUrl = null;
-  try {
-    const channel = await interaction.client.channels.fetch(CF_CHANNEL_ID);
-    const msgId = result === "heads" ? CF_HEADS_MSG_ID : CF_TAILS_MSG_ID;
-    const msg = await channel.messages.fetch(msgId);
-    if (msg.attachments.size > 0) gifUrl = msg.attachments.first().url;
-  } catch (e) {}
+  const gifUrl = result === "heads" ? CF_HEADS_GIF : CF_TAILS_GIF;
 
   await interaction.deferUpdate();
 
@@ -97,8 +87,8 @@ async function handleCoinflipButton(interaction) {
   const gifEmbed = new EmbedBuilder()
     .setColor(0x3b82f6)
     .setTitle("🪙 코인플립")
-    .setDescription("코인이 돌아가고 있습니다...");
-  if (gifUrl) gifEmbed.setImage(gifUrl);
+    .setDescription("코인이 돌아가고 있습니다...")
+    .setImage(gifUrl);
 
   await interaction.editReply({ embeds: [gifEmbed], components: [] });
   await sleep(2000);
