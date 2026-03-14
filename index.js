@@ -17,7 +17,7 @@ const client = new Client({
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Ready! Logged in as ${readyClient.user.tag}`);
   await initDb();
-  initScheduler();
+  initScheduler(readyClient);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {

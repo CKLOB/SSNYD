@@ -1,15 +1,18 @@
-const schedules = [];
+const { addSchedule, getSchedules, deleteSchedule } = require("../casino/db");
+
 const pendingSetup = new Map();
 
-function initScheduler() {
-  setInterval(() => {
-    if (schedules.length === 0) return;
+function initScheduler(client) {
+  setInterval(async () => {
     const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
     const h = kst.getUTCHours();
     const min = kst.getUTCMinutes();
+
+    const schedules = await getSchedules();
     for (const s of schedules) {
       if (h === s.hour && min === s.minute) {
-        s.channel.send(`# ${s.message}`);
+        const channel = client.channels.cache.get(s.channel_id);
+        if (channel) channel.send(`# ${s.message}`);
       }
     }
   }, 60 * 1000);
@@ -28,7 +31,8 @@ async function handleScheduler(message) {
         message.reply("❌ 채널을 멘션해주세요. 예: `#일반`");
         return true;
       }
-      state.channelObj = mentioned;
+      state.channelId = mentioned.id;
+      state.channelName = mentioned.name;
       state.step = "message";
       message.reply("📝 보낼 메세지를 입력해주세요.");
       return true;
@@ -53,17 +57,12 @@ async function handleScheduler(message) {
         message.reply("❌ 올바른 시간을 입력하세요. (00:00 ~ 23:59)");
         return true;
       }
-      schedules.push({
-        channel: state.channelObj,
-        message: state.message,
-        hour,
-        minute,
-      });
+      await addSchedule(state.channelId, state.channelName, state.message, hour, minute);
       pendingSetup.delete(userId);
       const hh = String(hour).padStart(2, "0");
       const mm = String(minute).padStart(2, "0");
       message.reply(
-        `✅ 매일 **${hh}:${mm}**에 **#${state.channelObj.name}** 채널로 메세지를 보낼게요.`,
+        `✅ 매일 **${hh}:${mm}**에 **#${state.channelName}** 채널로 메세지를 보낼게요.`,
       );
       return true;
     }
@@ -86,14 +85,15 @@ async function handleScheduler(message) {
   }
 
   if (content === "!알림목록") {
+    const schedules = await getSchedules();
     if (schedules.length === 0) {
       message.reply("📭 등록된 알림이 없습니다.");
     } else {
       const list = schedules
-        .map((s, i) => {
+        .map((s) => {
           const hh = String(s.hour).padStart(2, "0");
           const mm = String(s.minute).padStart(2, "0");
-          return `${i + 1}. **${hh}:${mm}** → **#${s.channel.name}** — ${s.message}`;
+          return `${s.id}. **${hh}:${mm}** → **#${s.channel_name}** — ${s.message}`;
         })
         .join("\n");
       message.reply(`📋 **등록된 알림 목록**\n${list}`);
@@ -103,13 +103,15 @@ async function handleScheduler(message) {
 
   if (content.startsWith("!알림삭제")) {
     const num = parseInt(content.slice("!알림삭제".length).trim());
-    if (isNaN(num) || num < 1 || num > schedules.length) {
-      message.reply(
-        `❌ 올바른 번호를 입력하세요. \`!알림목록\`으로 번호를 확인하세요.`,
-      );
+    if (isNaN(num)) {
+      message.reply(`❌ 올바른 번호를 입력하세요. \`!알림목록\`으로 번호를 확인하세요.`);
     } else {
-      schedules.splice(num - 1, 1);
-      message.reply(`✅ ${num}번 알림을 삭제했습니다.`);
+      const deleted = await deleteSchedule(num);
+      if (deleted) {
+        message.reply(`✅ ${num}번 알림을 삭제했습니다.`);
+      } else {
+        message.reply(`❌ ${num}번 알림을 찾을 수 없습니다.`);
+      }
     }
     return true;
   }

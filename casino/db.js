@@ -21,6 +21,16 @@ async function init() {
       last_support DATETIME NULL
     )
   `);
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS schedules (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      channel_id VARCHAR(30) NOT NULL,
+      channel_name VARCHAR(100) NOT NULL,
+      message TEXT NOT NULL,
+      hour TINYINT NOT NULL,
+      minute TINYINT NOT NULL
+    )
+  `);
 }
 
 async function getUser(id, username) {
@@ -53,4 +63,22 @@ async function getTopUsers(limit = 10) {
   return rows;
 }
 
-module.exports = { init, getUser, updateBalance, setField, getTopUsers };
+async function addSchedule(channelId, channelName, message, hour, minute) {
+  const [result] = await pool.execute(
+    `INSERT INTO schedules (channel_id, channel_name, message, hour, minute) VALUES (?, ?, ?, ?, ?)`,
+    [channelId, channelName, message, hour, minute]
+  );
+  return result.insertId;
+}
+
+async function getSchedules() {
+  const [rows] = await pool.execute(`SELECT * FROM schedules ORDER BY id`);
+  return rows;
+}
+
+async function deleteSchedule(id) {
+  const [result] = await pool.execute(`DELETE FROM schedules WHERE id = ?`, [id]);
+  return result.affectedRows > 0;
+}
+
+module.exports = { init, getUser, updateBalance, setField, getTopUsers, addSchedule, getSchedules, deleteSchedule };
