@@ -17,7 +17,8 @@ function getTargetDate() {
   const t = kst.getUTCHours() * 60 + kst.getUTCMinutes();
 
   let target = new Date(kst);
-  if (t >= 16 * 60 + 40) target = new Date(target.getTime() + 24 * 60 * 60 * 1000);
+  if (t >= 16 * 60 + 40)
+    target = new Date(target.getTime() + 24 * 60 * 60 * 1000);
 
   while (target.getUTCDay() === 0 || target.getUTCDay() === 6) {
     target = new Date(target.getTime() + 24 * 60 * 60 * 1000);
@@ -49,14 +50,16 @@ async function handleTimetable(message) {
     return true;
   }
 
-  const lines = subjects.map((subject, i) =>
-    `**${i + 1}교시** ${subject || "―"}`
+  const lines = subjects.map(
+    (subject, i) => `**${i + 1}교시**  -  ${subject || "―"}`,
   );
 
   const embed = new EmbedBuilder()
     .setColor(data.color)
     .setTitle(`📚 ${data.name} 시간표`)
-    .setDescription(`📅 **${month}월 ${day}일 (${dayName}요일)**\n\n${lines.join("\n")}`);
+    .setDescription(
+      `📅 **${month}월 ${day}일 (${dayName}요일)**\n\n${lines.join("\n")}`,
+    );
 
   message.reply({ embeds: [embed] });
   return true;
