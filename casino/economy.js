@@ -23,7 +23,7 @@ async function handleAttendance(message) {
       return message.reply("⏳ 오늘 이미 출석했습니다. 내일 다시 출석하세요.");
   }
 
-  await updateBalance(guildId, message.author.id, 10000);
+  await updateBalance(guildId, message.author.id, 150000);
   await setField(
     guildId,
     message.author.id,
@@ -36,7 +36,7 @@ async function handleAttendance(message) {
     .setColor(0x22c55e)
     .setTitle("📅 출석 완료!")
     .addFields(
-      { name: "보상", value: "+10,000원", inline: true },
+      { name: "보상", value: "+150,000원", inline: true },
       {
         name: "현재 잔액",
         value: `${updated.balance.toLocaleString()}원`,
