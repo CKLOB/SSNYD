@@ -10,9 +10,9 @@ function getMealByTime() {
   const todayStr = toNeisDateStr(kst);
   const tomorrowStr = toNeisDateStr(new Date(kst.getTime() + 24 * 60 * 60 * 1000));
 
-  if (t < 7 * 60 + 30) return { type: 1, dateStr: todayStr, dayLabel: "오늘" };
-  if (t < 12 * 60 + 30) return { type: 2, dateStr: todayStr, dayLabel: "오늘" };
-  if (t < 18 * 60 + 30) return { type: 3, dateStr: todayStr, dayLabel: "오늘" };
+  if (t < 7 * 60 + 40) return { type: 1, dateStr: todayStr, dayLabel: "오늘" };
+  if (t < 12 * 60 + 40) return { type: 2, dateStr: todayStr, dayLabel: "오늘" };
+  if (t < 18 * 60 + 40) return { type: 3, dateStr: todayStr, dayLabel: "오늘" };
   return { type: 1, dateStr: tomorrowStr, dayLabel: "내일" };
 }
 
