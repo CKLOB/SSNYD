@@ -1,10 +1,17 @@
-const { Client, Events, GatewayIntentBits, EmbedBuilder } = require("discord.js");
+require("dotenv").config();
+const {
+  Client,
+  Events,
+  GatewayIntentBits,
+  EmbedBuilder,
+} = require("discord.js");
 const { handleCasino, handleButtonInteraction } = require("./casino/handler");
 const { handleMeal } = require("./meal/handler");
 const { handleScheduler, initScheduler } = require("./scheduler/handler");
 const { handleTimetable } = require("./timetable/handler");
 const { init: initDb } = require("./db");
 const { handleRandom } = require("./random/handler");
+const { handleMusic } = require("./music/handler");
 
 async function handleHelp(message) {
   if (message.content.trim() !== "!명령어") return false;
@@ -43,6 +50,14 @@ async function handleHelp(message) {
           "`!바카라 금액` — 바카라 (플레이어/뱅커/타이)",
           "`!룰렛 금액` — 룰렛 (홀/짝/검/빨)",
           "※ 금액 대신 `올인` / `반` 사용 가능",
+        ].join("\n"),
+      },
+      {
+        name: "🎧 음악",
+        value: [
+          "`!노추` / `!노래` / `!오노추` — 랜덤 노래 추천",
+          "`!노추 [장르]` — 장르별 노래 추천 (케이팝, 팝, 록, 힙합 등)",
+          "`!가수 [키워드]` — 노래/아티스트 검색",
         ].join("\n"),
       },
       {
@@ -86,6 +101,7 @@ client.on(Events.MessageCreate, async (message) => {
   if (await handleHelp(message)) return;
   if (await handleCasino(message)) return;
   if (await handleRandom(message)) return;
+  if (await handleMusic(message)) return;
   if (await handleScheduler(message)) return;
   if (await handleTimetable(message)) return;
   await handleMeal(message);
