@@ -133,14 +133,16 @@ async function handleMusic(message) {
     }
 
     try {
-      const data = await searchTracks(query, 1);
-      const track = data.tracks?.items?.[0];
-      if (!track) {
+      const data = await searchTracks(query, 10);
+      const tracks = data.tracks?.items;
+      if (!tracks || tracks.length === 0) {
         message.reply(`😢 **${query}** 검색 결과가 없습니다.`);
         return true;
       }
 
-      const embed = buildTrackEmbed(track, `🔍 "${query}" 검색 결과`, 0x5865f2);
+      const unique = [...new Map(tracks.map((t) => [t.id, t])).values()];
+      const picked = unique[Math.floor(Math.random() * unique.length)];
+      const embed = buildTrackEmbed(picked, `🔍 "${query}" 검색 결과`, 0x5865f2);
       message.reply({ embeds: [embed] });
     } catch (err) {
       console.error(err);
