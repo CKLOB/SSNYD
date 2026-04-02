@@ -1,4 +1,10 @@
-const { addSchedule, getAllSchedules, getSchedules, deleteSchedule, deleteAllSchedules } = require("../db");
+const {
+  addSchedule,
+  getAllSchedules,
+  getSchedules,
+  deleteSchedule,
+  deleteAllSchedules,
+} = require("../db");
 
 const pendingSetup = new Map();
 

@@ -33,7 +33,10 @@ function fetchMeal(dateStr, mealType) {
         res.on("end", () => {
           try {
             const json = JSON.parse(raw);
-            if (!json.mealServiceDietInfo) { resolve(null); return; }
+            if (!json.mealServiceDietInfo) {
+              resolve(null);
+              return;
+            }
             const row = json.mealServiceDietInfo[1].row[0];
             const menu = row.DDISH_NM.replace(/\*/g, "")
               .split(/<br\/>/i)
@@ -61,13 +64,31 @@ async function handleMeal(message) {
 
   if (["!밥", "!ㅂ", "!q", "!급식", "!ㄱㅅ", "!ㄳ", "!rt"].includes(content)) {
     ({ type: mealType, dayLabel, dateStr } = getMealByTime());
-  } else if (content === "!오늘아침") { mealType = 1; dayLabel = "오늘"; dateStr = todayStr; }
-  else if (content === "!오늘점심") { mealType = 2; dayLabel = "오늘"; dateStr = todayStr; }
-  else if (content === "!오늘저녁") { mealType = 3; dayLabel = "오늘"; dateStr = todayStr; }
-  else if (content === "!내일아침") { mealType = 1; dayLabel = "내일"; dateStr = tomorrowStr; }
-  else if (content === "!내일점심") { mealType = 2; dayLabel = "내일"; dateStr = tomorrowStr; }
-  else if (content === "!내일저녁") { mealType = 3; dayLabel = "내일"; dateStr = tomorrowStr; }
-  else return false;
+  } else if (content === "!오늘아침") {
+    mealType = 1;
+    dayLabel = "오늘";
+    dateStr = todayStr;
+  } else if (content === "!오늘점심") {
+    mealType = 2;
+    dayLabel = "오늘";
+    dateStr = todayStr;
+  } else if (content === "!오늘저녁") {
+    mealType = 3;
+    dayLabel = "오늘";
+    dateStr = todayStr;
+  } else if (content === "!내일아침") {
+    mealType = 1;
+    dayLabel = "내일";
+    dateStr = tomorrowStr;
+  } else if (content === "!내일점심") {
+    mealType = 2;
+    dayLabel = "내일";
+    dateStr = tomorrowStr;
+  } else if (content === "!내일저녁") {
+    mealType = 3;
+    dayLabel = "내일";
+    dateStr = tomorrowStr;
+  } else return false;
 
   try {
     const result = await fetchMeal(dateStr, mealType);
