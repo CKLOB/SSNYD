@@ -19,17 +19,11 @@ async function handleAttendance(message) {
   if (user.last_attendance) {
     const lastDate = toKSTDateStr(new Date(user.last_attendance));
     const today = toKSTDateStr(new Date());
-    if (lastDate >= today)
-      return message.reply("⏳ 오늘 이미 출석했습니다. 내일 다시 출석하세요.");
+    if (lastDate >= today) return message.reply("⏳ 오늘 이미 출석했습니다. 내일 다시 출석하세요.");
   }
 
   await updateBalance(guildId, message.author.id, 150000);
-  await setField(
-    guildId,
-    message.author.id,
-    "last_attendance",
-    toMysqlDatetime(new Date()),
-  );
+  await setField(guildId, message.author.id, "last_attendance", toMysqlDatetime(new Date()));
   const updated = await getUser(guildId, message.author.id, message.author.username);
 
   const embed = new EmbedBuilder()
@@ -83,20 +77,13 @@ async function handleBalance(message) {
 async function handleSupport(message) {
   const guildId = message.guild.id;
   const user = await getUser(guildId, message.author.id, message.author.username);
-  if (user.balance > 0)
-    return message.reply("❌ 잔액이 0원일 때만 지원금을 받을 수 있습니다.");
+  if (user.balance > 0) return message.reply("❌ 잔액이 0원일 때만 지원금을 받을 수 있습니다.");
 
   const left = cooldownLeft(user.last_support, 60 * 60 * 1000);
-  if (left)
-    return message.reply(`⏳ **${left}** 후에 다시 신청할 수 있습니다.`);
+  if (left) return message.reply(`⏳ **${left}** 후에 다시 신청할 수 있습니다.`);
 
   await updateBalance(guildId, message.author.id, 100000);
-  await setField(
-    guildId,
-    message.author.id,
-    "last_support",
-    toMysqlDatetime(new Date()),
-  );
+  await setField(guildId, message.author.id, "last_support", toMysqlDatetime(new Date()));
   const updated = await getUser(guildId, message.author.id, message.author.username);
 
   const embed = new EmbedBuilder()
@@ -116,17 +103,13 @@ async function handleSupport(message) {
 async function handleTransfer(message, args) {
   const guildId = message.guild.id;
   const mention = message.mentions.users.first();
-  if (!mention)
-    return message.reply(
-      "❌ 송금할 대상을 멘션해주세요. 예) `!송금 @이름 10000`",
-    );
+  if (!mention) return message.reply("❌ 송금할 대상을 멘션해주세요. 예) `!송금 @이름 10000`");
   if (mention.id === message.author.id)
     return message.reply("❌ 자기 자신에게는 송금할 수 없습니다.");
   if (mention.bot) return message.reply("❌ 봇에게는 송금할 수 없습니다.");
 
   const amountStr = args[1];
-  if (!amountStr)
-    return message.reply("❌ 송금 금액을 입력하세요. 예) `!송금 @이름 10000`");
+  if (!amountStr) return message.reply("❌ 송금 금액을 입력하세요. 예) `!송금 @이름 10000`");
 
   const sender = await getUser(guildId, message.author.id, message.author.username);
   const lower = amountStr.toLowerCase();
@@ -148,11 +131,7 @@ async function handleTransfer(message, args) {
   await updateBalance(guildId, message.author.id, -amount);
   await getUser(guildId, mention.id, mention.username);
   await updateBalance(guildId, mention.id, received);
-  const senderUpdated = await getUser(
-    guildId,
-    message.author.id,
-    message.author.username,
-  );
+  const senderUpdated = await getUser(guildId, message.author.id, message.author.username);
 
   const embed = new EmbedBuilder()
     .setColor(0x8b5cf6)
@@ -181,8 +160,7 @@ async function handleRanking(message) {
   const medals = ["🥇", "🥈", "🥉"];
   const list = users
     .map(
-      (u, i) =>
-        `${medals[i] ?? `${i + 1}.`} **${u.username}** — ${u.balance.toLocaleString()}원`,
+      (u, i) => `${medals[i] ?? `${i + 1}.`} **${u.username}** — ${u.balance.toLocaleString()}원`,
     )
     .join("\n");
 

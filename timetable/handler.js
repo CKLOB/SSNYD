@@ -1,17 +1,9 @@
 const { EmbedBuilder } = require("discord.js");
 const https = require("https");
-const {
-  kstNow,
-  toNeisDateStr,
-  NEIS_KEY,
-  ATPT_CODE,
-  SCHOOL_CODE,
-} = require("../utils");
+const { kstNow, toNeisDateStr, NEIS_KEY, ATPT_CODE, SCHOOL_CODE } = require("../utils");
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
-const CLASS_COLORS = [
-  0x3b82f6, 0x10b981, 0xf59e0b, 0x8b5cf6, 0xef4444, 0xec4899,
-];
+const CLASS_COLORS = [0x3b82f6, 0x10b981, 0xf59e0b, 0x8b5cf6, 0xef4444, 0xec4899];
 
 function getClassFromRoles(member) {
   for (const role of member.roles.cache.values()) {
@@ -33,8 +25,7 @@ function getTargetDate() {
   const t = kst.getUTCHours() * 60 + kst.getUTCMinutes();
 
   let target = new Date(kst);
-  if (t >= 16 * 60 + 40)
-    target = new Date(target.getTime() + 24 * 60 * 60 * 1000);
+  if (t >= 16 * 60 + 40) target = new Date(target.getTime() + 24 * 60 * 60 * 1000);
 
   while (target.getUTCDay() === 0 || target.getUTCDay() === 6)
     target = new Date(target.getTime() + 24 * 60 * 60 * 1000);
@@ -69,7 +60,7 @@ function fetchTimetable(dateStr, grade, classNum) {
             resolve(
               rows.map((r) => ({
                 period: parseInt(r.PERIO),
-                subject: r.ITRT_CNTNT,
+                subject: r.ITRT_CNTNT.trim(),
               })),
             );
           } catch (e) {
@@ -87,9 +78,7 @@ async function handleTimetable(message) {
 
   const info = getClassFromRoles(message.member);
   if (!info) {
-    message.reply(
-      "❌ 반 역할이 없습니다. (예: `1반`, `2-1`) 관리자에게 문의하세요.",
-    );
+    message.reply("❌ 반 역할이 없습니다. (예: `1반`, `2-1`) 관리자에게 문의하세요.");
     return true;
   }
 
@@ -103,21 +92,24 @@ async function handleTimetable(message) {
   try {
     const rows = await fetchTimetable(dateStr, grade, classNum);
     if (!rows || rows.length === 0) {
-      message.reply(
-        `😢 ${month}월 ${day}일(${dayName}) 시간표 정보가 없습니다.`,
-      );
+      message.reply(`😢 ${month}월 ${day}일(${dayName}) 시간표 정보가 없습니다.`);
       return true;
     }
 
-    const lines = rows.map((r) => `**${r.period}교시**  -  ${r.subject}`);
+    const seen = new Set();
+    const deduped = rows.filter((r) => {
+      const key = `${r.period}:${r.subject}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const lines = deduped.map((r) => `**${r.period}교시**  -  ${r.subject}`);
     const color = CLASS_COLORS[(classNum - 1) % CLASS_COLORS.length];
 
     const embed = new EmbedBuilder()
       .setColor(color)
       .setTitle(`📚 ${grade} - ${classNum} 시간표`)
-      .setDescription(
-        `📅 **${month}월 ${day}일 (${dayName}요일)**\n\n${lines.join("\n")}`,
-      );
+      .setDescription(`📅 **${month}월 ${day}일 (${dayName}요일)**\n\n${lines.join("\n")}`);
 
     message.reply({ embeds: [embed] });
   } catch (err) {

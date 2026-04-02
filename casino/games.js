@@ -1,9 +1,4 @@
-const {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-} = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const { getUser, updateBalance } = require("../db");
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -35,25 +30,9 @@ const CF_TAILS_GIF =
   "https://cdn.discordapp.com/attachments/1481328528833380454/1481872528333996154/202603131311_2.gif";
 
 const SUITS = ["♠", "♥", "♦", "♣"];
-const VALUES = [
-  "A",
-  "2",
-  "3",
-  "4",
-  "5",
-  "6",
-  "7",
-  "8",
-  "9",
-  "10",
-  "J",
-  "Q",
-  "K",
-];
+const VALUES = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
 
-const RED_NUMS = new Set([
-  1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36,
-]);
+const RED_NUMS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 
 const ROULETTE_GIFS = [
   "https://cdn.discordapp.com/attachments/1481972735684120607/1481972772111650930/202603132003.gif?ex=69b54232&is=69b3f0b2&hm=37b2d8ab6beafaa5a6f2d33089a4e841f5831605a1d2f269830c9ae1645d2f0b&",
@@ -126,9 +105,7 @@ function bjHandVal(hand) {
 }
 
 function bjHandStr(hand, hideSecond = false) {
-  return hand
-    .map((c, i) => (hideSecond && i === 1 ? "🂠" : `${c.s}${c.v}`))
-    .join("  ");
+  return hand.map((c, i) => (hideSecond && i === 1 ? "🂠" : `${c.s}${c.v}`)).join("  ");
 }
 
 function buildBjRow(userId) {
@@ -188,11 +165,7 @@ function runBaccarat() {
 }
 
 async function handleCoinflip(message, args) {
-  const user = await getUser(
-    message.guild.id,
-    message.author.id,
-    message.author.username,
-  );
+  const user = await getUser(message.guild.id, message.author.id, message.author.username);
   const { error, amount } = parseBet(args[0], user.balance);
   if (error) return message.reply(error);
 
@@ -211,9 +184,7 @@ async function handleCoinflip(message, args) {
   const embed = new EmbedBuilder()
     .setColor(0x3b82f6)
     .setTitle("🪙 코인플립")
-    .setDescription(
-      `베팅 금액: **${amount.toLocaleString()}원**\n앞면 / 뒷면 중 선택하세요.`,
-    );
+    .setDescription(`베팅 금액: **${amount.toLocaleString()}원**\n앞면 / 뒷면 중 선택하세요.`);
 
   activeGamblers.add(uid);
   message.reply({ embeds: [embed], components: [row] });
@@ -236,11 +207,7 @@ async function handleCoinflipButton(interaction) {
   const delta = win ? amount : -amount;
 
   await updateBalance(interaction.guildId, userId, delta);
-  const updated = await getUser(
-    interaction.guildId,
-    userId,
-    interaction.user.username,
-  );
+  const updated = await getUser(interaction.guildId, userId, interaction.user.username);
   const gifUrl = result === "heads" ? CF_HEADS_GIF : CF_TAILS_GIF;
 
   await interaction.deferUpdate();
@@ -290,11 +257,7 @@ async function handleBlackjack(message, args) {
   if (bjGames.has(message.author.id))
     return message.reply("❌ 이미 진행 중인 블랙잭 게임이 있습니다.");
 
-  const user = await getUser(
-    message.guild.id,
-    message.author.id,
-    message.author.username,
-  );
+  const user = await getUser(message.guild.id, message.author.id, message.author.username);
   const { error, amount } = parseBet(args[0], user.balance);
   if (error) return message.reply(error);
 
@@ -317,11 +280,7 @@ async function handleBlackjack(message, args) {
       delta = amount;
       resultText = "🎉 블랙잭! 승리!";
     }
-    const updated = await getUser(
-      message.guild.id,
-      message.author.id,
-      message.author.username,
-    );
+    const updated = await getUser(message.guild.id, message.author.id, message.author.username);
     return message.reply({
       embeds: [
         new EmbedBuilder()
@@ -399,11 +358,7 @@ async function handleBjButton(interaction) {
     if (val > 21) {
       bjGames.delete(userId);
       activeGamblers.delete(userId);
-      const updated = await getUser(
-        game.guildId,
-        userId,
-        interaction.user.username,
-      );
+      const updated = await getUser(game.guildId, userId, interaction.user.username);
       return interaction.update({
         embeds: [
           new EmbedBuilder()
@@ -478,11 +433,7 @@ async function handleBjButton(interaction) {
       resultText = "😔 패배";
     }
 
-    const updated = await getUser(
-      game.guildId,
-      userId,
-      interaction.user.username,
-    );
+    const updated = await getUser(game.guildId, userId, interaction.user.username);
     return interaction.update({
       embeds: [
         new EmbedBuilder()
@@ -514,11 +465,7 @@ async function handleBjButton(interaction) {
 }
 
 async function handleBaccarat(message, args) {
-  const user = await getUser(
-    message.guild.id,
-    message.author.id,
-    message.author.username,
-  );
+  const user = await getUser(message.guild.id, message.author.id, message.author.username);
   const { error, amount } = parseBet(args[0], user.balance);
   if (error) return message.reply(error);
 
@@ -544,9 +491,7 @@ async function handleBaccarat(message, args) {
       new EmbedBuilder()
         .setColor(0x3b82f6)
         .setTitle("🎴 바카라")
-        .setDescription(
-          `베팅 금액: **${amount.toLocaleString()}원**\n어디에 베팅할까요?`,
-        ),
+        .setDescription(`베팅 금액: **${amount.toLocaleString()}원**\n어디에 베팅할까요?`),
     ],
     components: [row],
   });
@@ -564,11 +509,7 @@ async function handleBaccaratButton(interaction) {
       ephemeral: true,
     });
 
-  const user = await getUser(
-    interaction.guildId,
-    userId,
-    interaction.user.username,
-  );
+  const user = await getUser(interaction.guildId, userId, interaction.user.username);
   if (user.balance < amount) {
     activeGamblers.delete(userId);
     return interaction.update({
@@ -607,11 +548,7 @@ async function handleBaccaratButton(interaction) {
     delta = -amount;
   }
 
-  const updated = await getUser(
-    interaction.guildId,
-    userId,
-    interaction.user.username,
-  );
+  const updated = await getUser(interaction.guildId, userId, interaction.user.username);
   const resultText = isTie
     ? side === "tie"
       ? "🎉 타이 적중!"
@@ -619,12 +556,7 @@ async function handleBaccaratButton(interaction) {
     : userWin
       ? "🎉 승리!"
       : "😔 패배";
-  const resultColor =
-    userWin || (isTie && side === "tie")
-      ? 0x22c55e
-      : isTie
-        ? 0x6b7280
-        : 0xef4444;
+  const resultColor = userWin || (isTie && side === "tie") ? 0x22c55e : isTie ? 0x6b7280 : 0xef4444;
 
   await interaction.deferUpdate();
 
@@ -679,9 +611,7 @@ async function handleBaccaratButton(interaction) {
         )
         .setFooter({
           text:
-            player.length > 2 || banker.length > 2
-              ? "3번째 카드 배분 중..."
-              : "결과 집계 중...",
+            player.length > 2 || banker.length > 2 ? "3번째 카드 배분 중..." : "결과 집계 중...",
         }),
     ],
   });
@@ -742,11 +672,7 @@ async function handleBaccaratButton(interaction) {
 }
 
 async function handleRoulette(message, args) {
-  const user = await getUser(
-    message.guild.id,
-    message.author.id,
-    message.author.username,
-  );
+  const user = await getUser(message.guild.id, message.author.id, message.author.username);
   const { error, amount } = parseBet(args[0], user.balance);
   if (error) return message.reply(error);
 
@@ -796,11 +722,7 @@ async function handleRouletteButton(interaction) {
       ephemeral: true,
     });
 
-  const user = await getUser(
-    interaction.guildId,
-    userId,
-    interaction.user.username,
-  );
+  const user = await getUser(interaction.guildId, userId, interaction.user.username);
   if (user.balance < amount)
     return interaction.update({
       embeds: [
@@ -831,14 +753,8 @@ async function handleRouletteButton(interaction) {
   if (win) await updateBalance(interaction.guildId, userId, amount * 2);
 
   const delta = win ? amount : -amount;
-  const updated = await getUser(
-    interaction.guildId,
-    userId,
-    interaction.user.username,
-  );
-  const betLabel = { odd: "홀", even: "짝", black: "⚫ 검", red: "🔴 빨" }[
-    betType
-  ];
+  const updated = await getUser(interaction.guildId, userId, interaction.user.username);
+  const betLabel = { odd: "홀", even: "짝", black: "⚫ 검", red: "🔴 빨" }[betType];
 
   await interaction.deferUpdate();
   await interaction.editReply({
