@@ -23,4 +23,12 @@ const NEIS_KEY = process.env.NEIS_API_KEY || "c11ea26f8c614f50bd7b19d2f3228e6d";
 const ATPT_CODE = "F10";
 const SCHOOL_CODE = "7380292";
 
-module.exports = { kstNow, toMysqlDatetime, toKSTDateStr, toNeisDateStr, NEIS_KEY, ATPT_CODE, SCHOOL_CODE };
+module.exports = {
+  kstNow,
+  toMysqlDatetime,
+  toKSTDateStr,
+  toNeisDateStr,
+  NEIS_KEY,
+  ATPT_CODE,
+  SCHOOL_CODE,
+};
