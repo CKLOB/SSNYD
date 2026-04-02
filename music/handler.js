@@ -46,14 +46,7 @@ const GENRE_ARTISTS = {
     "god",
     "서태지와 아이들",
   ],
-  팝: [
-    "Taylor Swift",
-    "Ariana Grande",
-    "Bruno Mars",
-    "Billie Eilish",
-    "The Weeknd",
-    "maroon 5",
-  ],
+  팝: ["Taylor Swift", "Ariana Grande", "Bruno Mars", "Billie Eilish", "The Weeknd", "maroon 5"],
   제이팝: [
     "그린애플",
     "요네즈 켄시",
@@ -90,14 +83,7 @@ const GENRE_ARTISTS = {
     "제이통",
     "코드 쿤스트",
   ],
-  알앤비: [
-    "Frank Ocean",
-    "SZA",
-    "Daniel Caesar",
-    "H.E.R.",
-    "Bryson Tiller",
-    "The Weeknd",
-  ],
+  알앤비: ["Frank Ocean", "SZA", "Daniel Caesar", "H.E.R.", "Bryson Tiller", "The Weeknd"],
   인디: [
     "검정치마",
     "잔나비",
@@ -119,16 +105,12 @@ const RECOMMEND_CMDS = ["!노추", "!노래", "!오노추"];
 async function handleMusic(message) {
   const content = message.content.trim();
 
-  const recCmd = RECOMMEND_CMDS.find(
-    (cmd) => content === cmd || content.startsWith(cmd + " "),
-  );
+  const recCmd = RECOMMEND_CMDS.find((cmd) => content === cmd || content.startsWith(cmd + " "));
   if (recCmd) {
     const input = content.slice(recCmd.length).trim();
     const genreKey =
       GENRE_LIST.find((g) => g === input) ||
-      (input === ""
-        ? GENRE_LIST[Math.floor(Math.random() * GENRE_LIST.length)]
-        : null);
+      (input === "" ? GENRE_LIST[Math.floor(Math.random() * GENRE_LIST.length)] : null);
 
     if (input && !genreKey) {
       const embed = new EmbedBuilder()
@@ -161,9 +143,7 @@ async function handleMusic(message) {
       message.reply({ embeds: [embed] });
     } catch (err) {
       console.error(err);
-      message.reply(
-        "❌ Spotify API 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
-      );
+      message.reply("❌ Spotify API 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
     }
     return true;
   }
@@ -185,17 +165,11 @@ async function handleMusic(message) {
 
       const unique = [...new Map(tracks.map((t) => [t.id, t])).values()];
       const picked = unique[Math.floor(Math.random() * unique.length)];
-      const embed = buildTrackEmbed(
-        picked,
-        `🔍 "${query}" 검색 결과`,
-        0x5865f2,
-      );
+      const embed = buildTrackEmbed(picked, `🔍 "${query}" 검색 결과`, 0x5865f2);
       message.reply({ embeds: [embed] });
     } catch (err) {
       console.error(err);
-      message.reply(
-        "❌ Spotify API 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
-      );
+      message.reply("❌ Spotify API 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
     }
     return true;
   }

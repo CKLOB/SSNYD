@@ -16,8 +16,11 @@ function httpsPost(options, body) {
           reject(new Error("Spotify HTTP " + res.statusCode + ": " + raw.slice(0, 200)));
           return;
         }
-        try { resolve(JSON.parse(raw)); }
-        catch (e) { reject(e); }
+        try {
+          resolve(JSON.parse(raw));
+        } catch (e) {
+          reject(e);
+        }
       });
     });
     req.on("error", reject);
@@ -35,18 +38,23 @@ function httpsGet(url, token) {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     };
-    https.get(options, (res) => {
-      let raw = "";
-      res.on("data", (chunk) => (raw += chunk));
-      res.on("end", () => {
-        if (res.statusCode !== 200) {
-          reject(new Error(`Spotify HTTP ${res.statusCode}: ${raw.slice(0, 200)}`));
-          return;
-        }
-        try { resolve(JSON.parse(raw)); }
-        catch (e) { reject(e); }
-      });
-    }).on("error", reject);
+    https
+      .get(options, (res) => {
+        let raw = "";
+        res.on("data", (chunk) => (raw += chunk));
+        res.on("end", () => {
+          if (res.statusCode !== 200) {
+            reject(new Error(`Spotify HTTP ${res.statusCode}: ${raw.slice(0, 200)}`));
+            return;
+          }
+          try {
+            resolve(JSON.parse(raw));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      })
+      .on("error", reject);
   });
 }
 
@@ -76,7 +84,13 @@ async function getToken() {
 
 async function searchTracks(query, limit = 5, offset = 0) {
   const token = await getToken();
-  const params = new URLSearchParams({ q: query, type: "track", limit: String(limit), market: "KR", offset: String(offset) });
+  const params = new URLSearchParams({
+    q: query,
+    type: "track",
+    limit: String(limit),
+    market: "KR",
+    offset: String(offset),
+  });
   const url = `https://api.spotify.com/v1/search?${params}`;
   return httpsGet(url, token);
 }

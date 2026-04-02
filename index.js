@@ -1,10 +1,5 @@
 require("dotenv").config();
-const {
-  Client,
-  Events,
-  GatewayIntentBits,
-  EmbedBuilder,
-} = require("discord.js");
+const { Client, Events, GatewayIntentBits, EmbedBuilder } = require("discord.js");
 const { handleCasino, handleButtonInteraction } = require("./casino/handler");
 const { handleMeal } = require("./meal/handler");
 const { handleScheduler, initScheduler } = require("./scheduler/handler");
