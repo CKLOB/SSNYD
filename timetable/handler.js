@@ -69,7 +69,7 @@ function fetchTimetable(dateStr, grade, classNum) {
             resolve(
               rows.map((r) => ({
                 period: parseInt(r.PERIO),
-                subject: r.ITRT_CNTNT,
+                subject: r.ITRT_CNTNT.trim(),
               })),
             );
           } catch (e) {
@@ -109,7 +109,14 @@ async function handleTimetable(message) {
       return true;
     }
 
-    const lines = rows.map((r) => `**${r.period}교시**  -  ${r.subject}`);
+    const seen = new Set();
+    const deduped = rows.filter((r) => {
+      const key = `${r.period}:${r.subject}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const lines = deduped.map((r) => `**${r.period}교시**  -  ${r.subject}`);
     const color = CLASS_COLORS[(classNum - 1) % CLASS_COLORS.length];
 
     const embed = new EmbedBuilder()
