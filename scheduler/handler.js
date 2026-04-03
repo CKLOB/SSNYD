@@ -1,10 +1,10 @@
-const {
+import {
   addSchedule,
   getAllSchedules,
   getSchedules,
   deleteSchedule,
   deleteAllSchedules,
-} = require("../db");
+} from "../db.js";
 
 const pendingSetup = new Map();
 
@@ -136,4 +136,4 @@ async function handleScheduler(message) {
   return false;
 }
 
-module.exports = { handleScheduler, initScheduler };
+export { handleScheduler, initScheduler };
