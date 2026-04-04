@@ -11,11 +11,11 @@ function buildTrackEmbed(track, title, color) {
     .setColor(color)
     .setTitle(title)
     .addFields(
-      { name: "🎵 제목", value: track.name, inline: true },
-      { name: "🎤 아티스트", value: artists, inline: true },
+      { name: "🎵 제목", value: track.name.trim().slice(0, 1024), inline: true },
+      { name: "🎤 아티스트", value: artists.trim().slice(0, 1024), inline: true },
       {
         name: "💿 앨범",
-        value: track.album?.name ?? "알 수 없음",
+        value: (track.album?.name ?? "알 수 없음").trim().slice(0, 1024),
         inline: false,
       },
     );
