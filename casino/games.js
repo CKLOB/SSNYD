@@ -1,5 +1,5 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
-const { getUser, updateBalance } = require("../db");
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import { getUser, updateBalance } from "../db.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -798,7 +798,7 @@ async function handleButtonInteraction(interaction) {
   if (id.startsWith("rl_")) return handleRouletteButton(interaction);
 }
 
-module.exports = {
+export {
   handleCoinflip,
   handleBlackjack,
   handleBaccarat,

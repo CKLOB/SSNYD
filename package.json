@@ -4,7 +4,7 @@
   "description": "",
   "license": "ISC",
   "author": "",
-  "type": "commonjs",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "discord.js": "^14.25.1",
+    "dotenv": "^17.3.1",
     "mysql2": "^3.19.1"
   },
   "devDependencies": {

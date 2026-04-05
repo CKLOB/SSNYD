@@ -1,6 +1,6 @@
-const { EmbedBuilder } = require("discord.js");
-const { getUser, updateBalance, setField, getTopUsers } = require("../db");
-const { toMysqlDatetime, toKSTDateStr } = require("../utils");
+import { EmbedBuilder } from "discord.js";
+import { getUser, updateBalance, setField, getTopUsers } from "../db.js";
+import { toMysqlDatetime, toKSTDateStr } from "../utils.js";
 
 function cooldownLeft(lastTime, ms) {
   if (!lastTime) return null;
@@ -171,7 +171,7 @@ async function handleRanking(message) {
   message.reply({ embeds: [embed] });
 }
 
-module.exports = {
+export {
   handleAttendance,
   handleWork,
   handleBalance,

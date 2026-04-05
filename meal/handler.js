@@ -1,6 +1,6 @@
-const { EmbedBuilder } = require("discord.js");
-const https = require("https");
-const { kstNow, toNeisDateStr, NEIS_KEY, ATPT_CODE, SCHOOL_CODE } = require("../utils");
+import { EmbedBuilder } from "discord.js";
+import https from "https";
+import { kstNow, toNeisDateStr, NEIS_KEY, ATPT_CODE, SCHOOL_CODE } from "../utils.js";
 
 const MEAL_LABELS = { 1: "조식", 2: "중식", 3: "석식" };
 
@@ -111,4 +111,4 @@ async function handleMeal(message) {
   return true;
 }
 
-module.exports = { handleMeal };
+export { handleMeal };

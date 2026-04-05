@@ -1,4 +1,4 @@
-const mysql = require("mysql2/promise");
+import mysql from "mysql2/promise";
 
 const pool = mysql.createPool({
   host: process.env.MYSQL_HOST,
@@ -119,7 +119,7 @@ async function deleteAllSchedules(guildId) {
   return result.affectedRows;
 }
 
-module.exports = {
+export {
   init,
   getUser,
   updateBalance,

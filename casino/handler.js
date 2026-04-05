@@ -1,19 +1,19 @@
-const {
+import {
   handleAttendance,
   handleWork,
   handleBalance,
   handleSupport,
   handleRanking,
   handleTransfer,
-} = require("./economy");
-const {
+} from "./economy.js";
+import {
   handleCoinflip,
   handleBlackjack,
   handleBaccarat,
   handleRoulette,
   handleButtonInteraction,
   isGambling,
-} = require("./games");
+} from "./games.js";
 
 const GAMBLING_CMDS = new Set(["!코인", "!블랙잭", "!바카라", "!룰렛"]);
 
@@ -64,4 +64,4 @@ async function handleCasino(message) {
   }
 }
 
-module.exports = { handleCasino, handleButtonInteraction };
+export { handleCasino, handleButtonInteraction };

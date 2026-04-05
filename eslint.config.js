@@ -1,9 +1,9 @@
-const js = require("@eslint/js");
-const n = require("eslint-plugin-n");
-const prettierConfig = require("eslint-config-prettier");
-const globals = require("globals");
+import js from "@eslint/js";
+import n from "eslint-plugin-n";
+import prettierConfig from "eslint-config-prettier";
+import globals from "globals";
 
-module.exports = [
+export default [
   js.configs.recommended,
   {
     languageOptions: {
@@ -16,9 +16,9 @@ module.exports = [
     plugins: { n },
     rules: {
       ...n.configs["flat/recommended"].rules,
-      "n/no-missing-require": "error",
+      "n/no-missing-import": "error",
       "n/no-process-exit": "warn",
-      "n/no-unpublished-require": "error",
+      "n/no-unpublished-import": "error",
     },
   },
   prettierConfig,
@@ -33,7 +33,7 @@ module.exports = [
   {
     files: ["eslint.config.js"],
     rules: {
-      "n/no-unpublished-require": "off",
+      "n/no-unpublished-import": "off",
     },
   },
 ];
