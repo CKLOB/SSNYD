@@ -35,18 +35,19 @@ async function getToken() {
   return cachedToken;
 }
 
-async function searchTracks(query, limit = 20, offset = 0) {
+async function searchTracks(query, limit = 10, offset = 0) {
   const token = await getToken();
-  const safeLimit = Math.min(50, Math.max(1, Math.floor(Number(limit)) || 20));
+  const safeLimit = Math.min(10, Math.max(1, Math.floor(Number(limit)) || 10));
   const safeOffset = Math.max(0, Math.floor(Number(offset)) || 0);
 
-  const url =
-    `https://api.spotify.com/v1/search` +
-    `?q=${encodeURIComponent(query)}` +
-    `&type=track` +
-    `&limit=${safeLimit}` +
-    `&market=KR` +
-    `&offset=${safeOffset}`;
+  const params = new URLSearchParams({
+    q: query,
+    type: "track",
+    limit: String(safeLimit),
+    market: "KR",
+    offset: String(safeOffset),
+  });
+  const url = `https://api.spotify.com/v1/search?${params}`;
 
   console.log("[Spotify] GET", url);
 
