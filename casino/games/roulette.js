@@ -100,7 +100,8 @@ async function handleRouletteButton(interaction) {
     });
 
   const user = await getUser(interaction.guildId, userId, interaction.user.username);
-  if (user.balance < amount)
+  if (user.balance < amount) {
+    activeGamblers.delete(userId);
     return interaction.update({
       embeds: [
         new EmbedBuilder()
@@ -110,6 +111,7 @@ async function handleRouletteButton(interaction) {
       ],
       components: [],
     });
+  }
 
   await updateBalance(interaction.guildId, userId, -amount);
 
