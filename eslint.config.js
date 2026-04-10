@@ -19,6 +19,7 @@ export default [
       "n/no-missing-import": "error",
       "n/no-process-exit": "warn",
       "n/no-unpublished-import": "error",
+      "n/no-unsupported-features/node-builtins": ["error", { ignores: ["fetch"] }],
     },
   },
   prettierConfig,

@@ -130,7 +130,7 @@ async function handleMusic(message) {
     try {
       const artists = GENRE_ARTISTS[genreKey];
       const artist = artists[Math.floor(Math.random() * artists.length)];
-      const data = await searchTracks(`artist:"${artist}"`, 50, 0);
+      const data = await searchTracks(`artist:"${artist}"`, 10, 0);
       const tracks = data.tracks?.items;
       if (!tracks || tracks.length === 0) {
         message.reply("😢 추천 곡을 찾지 못했습니다. 다시 시도해보세요.");
