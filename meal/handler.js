@@ -64,15 +64,15 @@ async function handleMeal(message) {
 
   if (["!밥", "!ㅂ", "!q", "!급식", "!ㄱㅅ", "!ㄳ", "!rt"].includes(content)) {
     ({ type: mealType, dayLabel, dateStr } = getMealByTime());
-  } else if (content === "!오늘아침") {
+  } else if (["!오늘아침", "!아침"].includes(content)) {
     mealType = 1;
     dayLabel = "오늘";
     dateStr = todayStr;
-  } else if (content === "!오늘점심") {
+  } else if (["!오늘점심", "!점심"].includes(content)) {
     mealType = 2;
     dayLabel = "오늘";
     dateStr = todayStr;
-  } else if (content === "!오늘저녁") {
+  } else if (["!오늘저녁", "!저녁"].includes(content)) {
     mealType = 3;
     dayLabel = "오늘";
     dateStr = todayStr;
