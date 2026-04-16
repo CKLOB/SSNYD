@@ -34,10 +34,9 @@ export async function sendBotStatus(type) {
     title: isOnline ? "🟢 섹시노예들 봇 온라인" : "🔴 섹시노예들 봇 오프라인",
     description: isOnline ? "봇이 정상적으로 시작되었습니다." : "봇이 종료되었습니다.",
     fields: [
-      { name: "환경", value: detectEnv(), inline: true },
-      { name: "시각", value: getKSTString(), inline: true },
+      { name: "환경", value: detectEnv(), inline: false },
+      { name: "시각", value: getKSTString(), inline: false },
     ],
-    timestamp: new Date().toISOString(),
   };
 
   await fetch(WEBHOOK_URL, {
