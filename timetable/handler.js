@@ -54,6 +54,11 @@ function fetchTimetable(dateStr, grade, classNum) {
   return new Promise((resolve, reject) => {
     const req = https.get(url, (res) => {
       console.log(`[NEIS] 시간표 응답 — status=${res.statusCode}`);
+      if (res.statusCode !== 200) {
+        res.resume();
+        reject(new Error(`HTTP ${res.statusCode}`));
+        return;
+      }
       let raw = "";
       res.on("data", (chunk) => (raw += chunk));
       res.on("end", () => {
