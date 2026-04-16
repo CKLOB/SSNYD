@@ -9,6 +9,7 @@ import { handleRandom } from "./random/handler.js";
 import { handleMusic } from "./music/handler.js";
 import { handleStatus } from "./status/handler.js";
 import { handleAcademic } from "./academic/handler.js";
+import { sendBotStatus } from "./webhook.js";
 
 async function handleHelp(message) {
   if (message.content.trim() !== "!명령어") return false;
@@ -89,9 +90,22 @@ const client = new Client({
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Ready! Logged in as ${readyClient.user.tag}`);
-  await initDb();
-  initScheduler(readyClient);
+  await sendBotStatus("online");
+  try {
+    await initDb();
+    initScheduler(readyClient);
+  } catch (e) {
+    console.error("DB 연결 실패:", e.message);
+  }
 });
+
+async function shutdown() {
+  await sendBotStatus("offline");
+  process.exit(0);
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isButton()) return;
