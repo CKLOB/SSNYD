@@ -17,7 +17,11 @@ function checkNeis() {
     const start = Date.now();
     const req = https.get(url, (res) => {
       res.resume();
-      resolve({ ok: true, ms: Date.now() - start });
+      if (res.statusCode !== 200) {
+        resolve({ ok: false, ms: null, error: `HTTP ${res.statusCode}` });
+      } else {
+        resolve({ ok: true, ms: Date.now() - start });
+      }
     });
     req.setTimeout(5000, () => {
       req.destroy();
