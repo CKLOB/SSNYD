@@ -119,8 +119,15 @@ async function deleteAllSchedules(guildId) {
   return result.affectedRows;
 }
 
+async function ping() {
+  const start = Date.now();
+  await pool.execute("SELECT 1");
+  return Date.now() - start;
+}
+
 export {
   init,
+  ping,
   getUser,
   updateBalance,
   setField,

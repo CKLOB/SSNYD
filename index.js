@@ -7,6 +7,7 @@ import { handleTimetable } from "./timetable/handler.js";
 import { init as initDb } from "./db.js";
 import { handleRandom } from "./random/handler.js";
 import { handleMusic } from "./music/handler.js";
+import { handleStatus } from "./status/handler.js";
 
 async function handleHelp(message) {
   if (message.content.trim() !== "!명령어") return false;
@@ -95,6 +96,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
   if (await handleHelp(message)) return;
+  if (await handleStatus(message, client)) return;
   if (await handleCasino(message)) return;
   if (await handleRandom(message)) return;
   if (await handleMusic(message)) return;

@@ -23,4 +23,29 @@ const NEIS_KEY = process.env.NEIS_API_KEY || "c11ea26f8c614f50bd7b19d2f3228e6d";
 const ATPT_CODE = "F10";
 const SCHOOL_CODE = "7380292";
 
-export { kstNow, toMysqlDatetime, toKSTDateStr, toNeisDateStr, NEIS_KEY, ATPT_CODE, SCHOOL_CODE };
+async function fetchWithRetry(fn, maxRetries = 2) {
+  let lastErr;
+  for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt <= maxRetries) {
+        console.warn(`[NEIS] 재시도 ${attempt}/${maxRetries} — ${err.message}`);
+        await new Promise((r) => setTimeout(r, 1000 * attempt));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+export {
+  kstNow,
+  toMysqlDatetime,
+  toKSTDateStr,
+  toNeisDateStr,
+  fetchWithRetry,
+  NEIS_KEY,
+  ATPT_CODE,
+  SCHOOL_CODE,
+};
