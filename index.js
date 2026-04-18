@@ -90,10 +90,10 @@ const client = new Client({
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Ready! Logged in as ${readyClient.user.tag}`);
-  await sendBotStatus("online");
   try {
     await initDb();
     initScheduler(readyClient);
+    await sendBotStatus("online");
   } catch (e) {
     console.error("DB 연결 실패:", e.message);
   }
