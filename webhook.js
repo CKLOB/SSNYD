@@ -36,5 +36,8 @@ export async function sendBotStatus(type) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ embeds: [embed] }),
-  }).catch(() => {});
+    signal: AbortSignal.timeout(5000),
+  }).catch((err) => {
+    console.error("웹훅 전송 실패:", err.message);
+  });
 }
