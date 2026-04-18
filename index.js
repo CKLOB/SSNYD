@@ -8,6 +8,8 @@ import { init as initDb } from "./db.js";
 import { handleRandom } from "./random/handler.js";
 import { handleMusic } from "./music/handler.js";
 import { handleStatus } from "./status/handler.js";
+import { handleAcademic } from "./academic/handler.js";
+import { sendBotStatus } from "./webhook.js";
 
 async function handleHelp(message) {
   if (message.content.trim() !== "!명령어") return false;
@@ -27,6 +29,10 @@ async function handleHelp(message) {
       {
         name: "📅 시간표",
         value: "`!시간표` — 오늘(또는 다음 날) 시간표",
+      },
+      {
+        name: "🗓️ 학사일정",
+        value: ["`!학사일정` — 이번 달 학사일정", "`!학사일정 N월` — N월 학사일정"].join("\n"),
       },
       {
         name: "💰 경제",
@@ -84,9 +90,22 @@ const client = new Client({
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Ready! Logged in as ${readyClient.user.tag}`);
-  await initDb();
-  initScheduler(readyClient);
+  try {
+    await initDb();
+    initScheduler(readyClient);
+    await sendBotStatus("online");
+  } catch (e) {
+    console.error("DB 연결 실패:", e.message);
+  }
 });
+
+async function shutdown() {
+  await sendBotStatus("offline");
+  process.exit(0);
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isButton()) return;
@@ -102,6 +121,7 @@ client.on(Events.MessageCreate, async (message) => {
   if (await handleMusic(message)) return;
   if (await handleScheduler(message)) return;
   if (await handleTimetable(message)) return;
+  if (await handleAcademic(message)) return;
   await handleMeal(message);
 });
 
