@@ -49,8 +49,8 @@ async function handleCasino(message) {
   const cmd = parts[0].toLowerCase();
   const args = parts.slice(1);
 
-  if (GAMBLING_CMDS.has(cmd) && message.guild) {
-    if (!(await getGamblingEnabled(message.guild.id))) {
+  if (GAMBLING_CMDS.has(cmd)) {
+    if (message.guild && !(await getGamblingEnabled(message.guild.id))) {
       await message.reply("🔒 현재 서버에서 도박 기능이 비활성화되어 있습니다.");
       return true;
     }
