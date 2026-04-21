@@ -17,7 +17,16 @@ import {
 } from "./games.js";
 import { getGamblingEnabled, setGamblingEnabled } from "../db.js";
 
-const GAMBLING_CMDS = new Set(["!코인", "!블랙잭", "!바카라", "!룰렛", "!출석", "!일", "!노동", "!지원금"]);
+const GAMBLING_CMDS = new Set([
+  "!코인",
+  "!블랙잭",
+  "!바카라",
+  "!룰렛",
+  "!출석",
+  "!일",
+  "!노동",
+  "!지원금",
+]);
 
 async function handleGamblingToggle(message, args) {
   if (!message.guild) {
