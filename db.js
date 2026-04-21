@@ -30,6 +30,12 @@ async function init() {
     await pool.execute(`ALTER TABLE users DROP PRIMARY KEY, ADD PRIMARY KEY (id, guild_id)`);
   } catch (_) {}
   await pool.execute(`
+    CREATE TABLE IF NOT EXISTS guild_settings (
+      guild_id VARCHAR(30) NOT NULL PRIMARY KEY,
+      gambling_enabled TINYINT(1) NOT NULL DEFAULT 1
+    )
+  `);
+  await pool.execute(`
     CREATE TABLE IF NOT EXISTS schedules (
       id INT AUTO_INCREMENT PRIMARY KEY,
       guild_id VARCHAR(30) NOT NULL DEFAULT '',
@@ -119,6 +125,22 @@ async function deleteAllSchedules(guildId) {
   return result.affectedRows;
 }
 
+async function getGamblingEnabled(guildId) {
+  const [rows] = await pool.execute(
+    `SELECT gambling_enabled FROM guild_settings WHERE guild_id = ?`,
+    [guildId],
+  );
+  return rows.length === 0 ? true : rows[0].gambling_enabled === 1;
+}
+
+async function setGamblingEnabled(guildId, enabled) {
+  await pool.execute(
+    `INSERT INTO guild_settings (guild_id, gambling_enabled) VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE gambling_enabled = VALUES(gambling_enabled)`,
+    [guildId, enabled ? 1 : 0],
+  );
+}
+
 async function ping() {
   const start = Date.now();
   await pool.execute("SELECT 1");
@@ -137,4 +159,6 @@ export {
   getSchedules,
   deleteSchedule,
   deleteAllSchedules,
+  getGamblingEnabled,
+  setGamblingEnabled,
 };
