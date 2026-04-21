@@ -5,7 +5,9 @@ async function getToken() {
   const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
   const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
   if (!CLIENT_ID || !CLIENT_SECRET)
-    throw new Error("SPOTIFY_CLIENT_ID 또는 SPOTIFY_CLIENT_SECRET 환경 변수가 설정되지 않았습니다.");
+    throw new Error(
+      "SPOTIFY_CLIENT_ID 또는 SPOTIFY_CLIENT_SECRET 환경 변수가 설정되지 않았습니다.",
+    );
 
   if (cachedToken && Date.now() < tokenExpiresAt) return cachedToken;
 
