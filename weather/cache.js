@@ -121,16 +121,16 @@ export async function getWeatherData() {
 
   const [ncst, fcst, air] = await Promise.all([
     fetchJson(
-      `${KMA}/getUltraSrtNcst?serviceKey=${KMA_KEY}&pageNo=1&numOfRows=10&dataType=JSON` +
+      `${KMA}/getUltraSrtNcst?serviceKey=${encodeURIComponent(KMA_KEY)}&pageNo=1&numOfRows=10&dataType=JSON` +
         `&base_date=${ncstBase.base_date}&base_time=${ncstBase.base_time}&nx=${NX}&ny=${NY}`,
     ),
     fetchJson(
-      `${KMA}/getVilageFcst?serviceKey=${KMA_KEY}&pageNo=1&numOfRows=500&dataType=JSON` +
+      `${KMA}/getVilageFcst?serviceKey=${encodeURIComponent(KMA_KEY)}&pageNo=1&numOfRows=500&dataType=JSON` +
         `&base_date=${fcstBase.base_date}&base_time=${fcstBase.base_time}&nx=${NX}&ny=${NY}`,
     ),
     fetchJson(
       `https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty` +
-        `?serviceKey=${AIR_KEY}&stationName=${encodeURIComponent(AIR_STATION)}` +
+        `?serviceKey=${encodeURIComponent(AIR_KEY)}&stationName=${encodeURIComponent(AIR_STATION)}` +
         `&dataTerm=DAILY&pageNo=1&numOfRows=1&returnType=json&ver=1.0`,
     ),
   ]);
