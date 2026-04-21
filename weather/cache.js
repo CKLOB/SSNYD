@@ -135,15 +135,15 @@ export async function getWeatherData() {
     ),
   ]);
 
-  if (ncst.response.header.resultCode !== "00")
-    throw new Error(`기상청 실황 오류: ${ncst.response.header.resultMsg}`);
-  if (fcst.response.header.resultCode !== "00")
-    throw new Error(`기상청 예보 오류: ${fcst.response.header.resultMsg}`);
-  if (air.response.header.resultCode !== "00")
-    throw new Error(`에어코리아 오류: ${air.response.header.resultMsg}`);
+  if (ncst?.response?.header?.resultCode !== "00")
+    throw new Error(`기상청 실황 오류: ${ncst?.response?.header?.resultMsg ?? "Unknown"}`);
+  if (fcst?.response?.header?.resultCode !== "00")
+    throw new Error(`기상청 예보 오류: ${fcst?.response?.header?.resultMsg ?? "Unknown"}`);
+  if (air?.response?.header?.resultCode !== "00")
+    throw new Error(`에어코리아 오류: ${air?.response?.header?.resultMsg ?? "Unknown"}`);
 
   // 초단기실황
-  const ncstItems = ncst.response.body.items.item;
+  const ncstItems = ncst.response.body.items?.item ?? [];
   const obs = (cat) => ncstItems.find((i) => i.category === cat)?.obsrValue;
   const temp = Math.round(parseFloat(obs("T1H") ?? 0));
   const wsd = parseFloat(obs("WSD") ?? 0);
@@ -151,7 +151,7 @@ export async function getWeatherData() {
   const ptyNow = parseInt(obs("PTY") ?? 0);
 
   // 단기예보
-  const fcstItems = fcst.response.body.items.item;
+  const fcstItems = fcst.response.body.items?.item ?? [];
   const fv = (cat) =>
     fcstItems.find((i) => i.category === cat && i.fcstDate === todayStr && i.fcstTime >= curHourStr)
       ?.fcstValue;
