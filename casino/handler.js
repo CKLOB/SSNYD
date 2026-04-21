@@ -20,7 +20,11 @@ import { getGamblingEnabled, setGamblingEnabled } from "../db.js";
 const GAMBLING_CMDS = new Set(["!코인", "!블랙잭", "!바카라", "!룰렛"]);
 
 async function handleGamblingToggle(message, args) {
-  const subCmd = args[0]?.toLowerCase();
+  if (!message.guild) {
+    await message.reply("❌ 이 명령어는 서버에서만 사용할 수 있습니다.");
+    return;
+  }
+  const subCmd = args[0]?.toLowerCase() || "";
 
   if (subCmd === "on" || subCmd === "off") {
     if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
@@ -45,7 +49,7 @@ async function handleCasino(message) {
   const cmd = parts[0].toLowerCase();
   const args = parts.slice(1);
 
-  if (GAMBLING_CMDS.has(cmd)) {
+  if (GAMBLING_CMDS.has(cmd) && message.guild) {
     if (!(await getGamblingEnabled(message.guild.id))) {
       await message.reply("🔒 현재 서버에서 도박 기능이 비활성화되어 있습니다.");
       return true;
