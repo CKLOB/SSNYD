@@ -4,7 +4,7 @@
 
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen)](https://nodejs.org/)
 [![discord.js](https://img.shields.io/badge/discord.js-v14-5865F2)](https://discord.js.org/)
-[![MySQL](https://img.shields.io/badge/MySQL-2-00758F)](https://www.mysql.com/)
+[![MariaDB](https://img.shields.io/badge/MariaDB-2-003545)](https://mariadb.org/)
 
 ---
 
