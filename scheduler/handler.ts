@@ -1,3 +1,4 @@
+import { Message, Client, TextChannel } from "discord.js";
 import {
   addSchedule,
   getAllSchedules,
@@ -6,9 +7,18 @@ import {
   deleteAllSchedules,
 } from "../db.js";
 
-const pendingSetup = new Map();
+type SetupStep = "channel" | "message" | "time";
 
-function initScheduler(client) {
+interface PendingState {
+  step: SetupStep;
+  channelId?: string;
+  channelName?: string;
+  message?: string;
+}
+
+const pendingSetup = new Map<string, PendingState>();
+
+export function initScheduler(client: Client): void {
   setInterval(async () => {
     const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
     const h = kst.getUTCHours();
@@ -18,19 +28,19 @@ function initScheduler(client) {
     for (const s of schedules) {
       if (h === s.hour && min === s.minute) {
         const channel = client.channels.cache.get(s.channel_id);
-        if (channel) channel.send(`# ${s.message}`);
+        if (channel) (channel as TextChannel).send(`# ${s.message}`);
       }
     }
   }, 60 * 1000);
 }
 
-async function handleScheduler(message) {
+export async function handleScheduler(message: Message): Promise<boolean> {
   const content = message.content.trim();
   const userId = message.author.id;
-  const guildId = message.guild.id;
+  const guildId = message.guild!.id;
 
   if (pendingSetup.has(userId)) {
-    const state = pendingSetup.get(userId);
+    const state = pendingSetup.get(userId)!;
 
     if (state.step === "channel") {
       const mentioned = message.mentions.channels.first();
@@ -39,7 +49,7 @@ async function handleScheduler(message) {
         return true;
       }
       state.channelId = mentioned.id;
-      state.channelName = mentioned.name;
+      state.channelName = (mentioned as TextChannel).name;
       state.step = "message";
       message.reply("📝 보낼 메세지를 입력해주세요.");
       return true;
@@ -64,7 +74,7 @@ async function handleScheduler(message) {
         message.reply("❌ 올바른 시간을 입력하세요. (00:00 ~ 23:59)");
         return true;
       }
-      await addSchedule(guildId, state.channelId, state.channelName, state.message, hour, minute);
+      await addSchedule(guildId, state.channelId!, state.channelName!, state.message!, hour, minute);
       pendingSetup.delete(userId);
       const hh = String(hour).padStart(2, "0");
       const mm = String(minute).padStart(2, "0");
@@ -135,5 +145,3 @@ async function handleScheduler(message) {
 
   return false;
 }
-
-export { handleScheduler, initScheduler };
