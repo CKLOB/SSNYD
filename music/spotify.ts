@@ -55,10 +55,10 @@ async function getToken(): Promise<string> {
     throw new Error(`Spotify 토큰 발급 실패: ${res.status} ${text.slice(0, 200)}`);
   }
 
-  const data = await res.json();
+  const data = (await res.json()) as { access_token?: string; expires_in: number };
   if (!data.access_token) throw new Error("Spotify 토큰 발급 실패");
 
-  cachedToken = data.access_token as string;
+  cachedToken = data.access_token;
   tokenExpiresAt = Date.now() + (data.expires_in - 60) * 1000;
   return cachedToken;
 }

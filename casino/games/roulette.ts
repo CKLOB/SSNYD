@@ -1,4 +1,11 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Message, ButtonInteraction } from "discord.js";
+import {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  Message,
+  ButtonInteraction,
+} from "discord.js";
 import { getUser, updateBalance } from "../../db.js";
 import { sleep, parseBet, fmt, activeGamblers } from "./shared.js";
 
@@ -47,15 +54,33 @@ const ROULETTE_GIFS = [
 export async function handleRoulette(message: Message, args: string[]): Promise<void> {
   const user = await getUser(message.guild!.id, message.author.id, message.author.username);
   const { error, amount } = parseBet(args[0], user.balance);
-  if (error) { message.reply(error); return; }
+  if (error) {
+    message.reply(error);
+    return;
+  }
 
   const uid = message.author.id;
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`rl_odd_${uid}_${amount}`).setLabel("홀").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`rl_even_${uid}_${amount}`).setLabel("짝").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`rl_black_${uid}_${amount}`).setLabel("검").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`rl_red_${uid}_${amount}`).setLabel("빨").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`rl_zero_${uid}_${amount}`).setLabel("0").setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`rl_odd_${uid}_${amount}`)
+      .setLabel("홀")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`rl_even_${uid}_${amount}`)
+      .setLabel("짝")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`rl_black_${uid}_${amount}`)
+      .setLabel("검")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`rl_red_${uid}_${amount}`)
+      .setLabel("빨")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`rl_zero_${uid}_${amount}`)
+      .setLabel("0")
+      .setStyle(ButtonStyle.Success),
   );
 
   activeGamblers.add(uid);
@@ -128,7 +153,13 @@ export async function handleRouletteButton(interaction: ButtonInteraction): Prom
   }
 
   const updated = await getUser(interaction.guildId!, userId, interaction.user.username);
-  const betLabel: Record<string, string> = { odd: "홀", even: "짝", black: "⚫ 검", red: "🔴 빨", zero: "🟢 0" };
+  const betLabel: Record<string, string> = {
+    odd: "홀",
+    even: "짝",
+    black: "⚫ 검",
+    red: "🔴 빨",
+    zero: "🟢 0",
+  };
 
   await interaction.deferUpdate();
   await interaction.editReply({

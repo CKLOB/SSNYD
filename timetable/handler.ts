@@ -50,7 +50,11 @@ function getTargetDate(): Date {
   return target;
 }
 
-function fetchTimetable(dateStr: string, grade: number, classNum: number): Promise<TimetableRow[] | null> {
+function fetchTimetable(
+  dateStr: string,
+  grade: number,
+  classNum: number,
+): Promise<TimetableRow[] | null> {
   const url =
     `https://open.neis.go.kr/hub/hisTimetable` +
     `?KEY=${NEIS_KEY}&Type=json&pIndex=1&pSize=100` +
@@ -69,6 +73,7 @@ function fetchTimetable(dateStr: string, grade: number, classNum: number): Promi
         reject(new Error(`HTTP ${res.statusCode}`));
         return;
       }
+      res.setEncoding("utf8");
       let raw = "";
       res.on("data", (chunk: string) => (raw += chunk));
       res.on("end", () => {

@@ -1,5 +1,12 @@
 import "dotenv/config";
-import { Client, Events, GatewayIntentBits, EmbedBuilder, Message, ButtonInteraction } from "discord.js";
+import {
+  Client,
+  Events,
+  GatewayIntentBits,
+  EmbedBuilder,
+  Message,
+  ButtonInteraction,
+} from "discord.js";
 import { handleCasino, handleButtonInteraction } from "./casino/handler.js";
 import { handleMeal } from "./meal/handler.js";
 import { handleScheduler, initScheduler } from "./scheduler/handler.js";

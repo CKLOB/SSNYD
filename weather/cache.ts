@@ -23,10 +23,14 @@ let cachedAt = 0;
 function fetchJson(url: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const req = https.get(url, (res) => {
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(`HTTP ${res.statusCode}`));
+      }
+      res.setEncoding("utf8");
       let raw = "";
       res.on("data", (c: string) => (raw += c));
       res.on("end", () => {
-        if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`));
         try {
           resolve(JSON.parse(raw));
         } catch (e) {
@@ -163,9 +167,8 @@ export async function getWeatherData(): Promise<WeatherData> {
   // 단기예보
   const fcstItems: any[] = fcst.response.body.items?.item ?? [];
   const fv = (cat: string): string | undefined =>
-    fcstItems.find(
-      (i) => i.category === cat && i.fcstDate === todayStr && i.fcstTime >= curHourStr,
-    )?.fcstValue;
+    fcstItems.find((i) => i.category === cat && i.fcstDate === todayStr && i.fcstTime >= curHourStr)
+      ?.fcstValue;
 
   const sky = parseInt(fv("SKY") ?? "1");
   const ptyFcst = parseInt(fv("PTY") ?? String(ptyNow));

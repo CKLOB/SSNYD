@@ -1,4 +1,11 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Message, ButtonInteraction } from "discord.js";
+import {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  Message,
+  ButtonInteraction,
+} from "discord.js";
 import { getUser, updateBalance } from "../../db.js";
 import { sleep, parseBet, fmt, activeGamblers, createDeck, Card } from "./shared.js";
 
@@ -58,7 +65,10 @@ function runBaccarat(): BaccaratResult {
 export async function handleBaccarat(message: Message, args: string[]): Promise<void> {
   const user = await getUser(message.guild!.id, message.author.id, message.author.username);
   const { error, amount } = parseBet(args[0], user.balance);
-  if (error) { message.reply(error); return; }
+  if (error) {
+    message.reply(error);
+    return;
+  }
 
   const uid = message.author.id;
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(

@@ -80,10 +80,10 @@ async function getUser(guildId: string, id: string, username: string): Promise<U
     guildId,
     username,
   ]);
-  const [rows] = await pool.execute<User[]>(
-    `SELECT * FROM users WHERE id = ? AND guild_id = ?`,
-    [id, guildId],
-  );
+  const [rows] = await pool.execute<User[]>(`SELECT * FROM users WHERE id = ? AND guild_id = ?`, [
+    id,
+    guildId,
+  ]);
   return rows[0];
 }
 
@@ -155,10 +155,9 @@ async function deleteSchedule(id: number, guildId: string): Promise<boolean> {
 }
 
 async function deleteAllSchedules(guildId: string): Promise<number> {
-  const [result] = await pool.execute<ResultSetHeader>(
-    `DELETE FROM schedules WHERE guild_id = ?`,
-    [guildId],
-  );
+  const [result] = await pool.execute<ResultSetHeader>(`DELETE FROM schedules WHERE guild_id = ?`, [
+    guildId,
+  ]);
   return result.affectedRows;
 }
 

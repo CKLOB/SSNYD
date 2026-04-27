@@ -74,7 +74,14 @@ export async function handleScheduler(message: Message): Promise<boolean> {
         message.reply("❌ 올바른 시간을 입력하세요. (00:00 ~ 23:59)");
         return true;
       }
-      await addSchedule(guildId, state.channelId!, state.channelName!, state.message!, hour, minute);
+      await addSchedule(
+        guildId,
+        state.channelId!,
+        state.channelName!,
+        state.message!,
+        hour,
+        minute,
+      );
       pendingSetup.delete(userId);
       const hh = String(hour).padStart(2, "0");
       const mm = String(minute).padStart(2, "0");
