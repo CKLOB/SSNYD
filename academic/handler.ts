@@ -26,6 +26,7 @@ function fetchAcademicSchedule(year: number, month: number): Promise<ScheduleRow
         res.resume();
         return reject(new Error(`HTTP ${res.statusCode}`));
       }
+      res.setEncoding("utf8");
       let raw = "";
       res.on("data", (chunk: string) => (raw += chunk));
       res.on("end", () => {

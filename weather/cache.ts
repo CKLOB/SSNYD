@@ -23,6 +23,7 @@ let cachedAt = 0;
 function fetchJson(url: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const req = https.get(url, (res) => {
+      res.setEncoding("utf8");
       let raw = "";
       res.on("data", (c: string) => (raw += c));
       res.on("end", () => {
@@ -163,9 +164,8 @@ export async function getWeatherData(): Promise<WeatherData> {
   // 단기예보
   const fcstItems: any[] = fcst.response.body.items?.item ?? [];
   const fv = (cat: string): string | undefined =>
-    fcstItems.find(
-      (i) => i.category === cat && i.fcstDate === todayStr && i.fcstTime >= curHourStr,
-    )?.fcstValue;
+    fcstItems.find((i) => i.category === cat && i.fcstDate === todayStr && i.fcstTime >= curHourStr)
+      ?.fcstValue;
 
   const sky = parseInt(fv("SKY") ?? "1");
   const ptyFcst = parseInt(fv("PTY") ?? String(ptyNow));

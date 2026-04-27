@@ -52,6 +52,7 @@ function fetchMeal(dateStr: string, mealType: number): Promise<MealResult | null
         reject(new Error(`HTTP ${res.statusCode}`));
         return;
       }
+      res.setEncoding("utf8");
       let raw = "";
       res.on("data", (chunk: string) => (raw += chunk));
       res.on("end", () => {
@@ -91,17 +92,29 @@ export async function handleMeal(message: Message): Promise<boolean> {
   if (["!밥", "!ㅂ", "!q", "!급식", "!ㄱㅅ", "!ㄳ", "!rt"].includes(content)) {
     ({ type: mealType, dayLabel, dateStr } = getMealByTime());
   } else if (["!오늘아침", "!아침"].includes(content)) {
-    mealType = 1; dayLabel = "오늘"; dateStr = todayStr;
+    mealType = 1;
+    dayLabel = "오늘";
+    dateStr = todayStr;
   } else if (["!오늘점심", "!점심"].includes(content)) {
-    mealType = 2; dayLabel = "오늘"; dateStr = todayStr;
+    mealType = 2;
+    dayLabel = "오늘";
+    dateStr = todayStr;
   } else if (["!오늘저녁", "!저녁"].includes(content)) {
-    mealType = 3; dayLabel = "오늘"; dateStr = todayStr;
+    mealType = 3;
+    dayLabel = "오늘";
+    dateStr = todayStr;
   } else if (content === "!내일아침") {
-    mealType = 1; dayLabel = "내일"; dateStr = tomorrowStr;
+    mealType = 1;
+    dayLabel = "내일";
+    dateStr = tomorrowStr;
   } else if (content === "!내일점심") {
-    mealType = 2; dayLabel = "내일"; dateStr = tomorrowStr;
+    mealType = 2;
+    dayLabel = "내일";
+    dateStr = tomorrowStr;
   } else if (content === "!내일저녁") {
-    mealType = 3; dayLabel = "내일"; dateStr = tomorrowStr;
+    mealType = 3;
+    dayLabel = "내일";
+    dateStr = tomorrowStr;
   } else return false;
 
   try {
