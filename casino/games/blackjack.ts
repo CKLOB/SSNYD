@@ -1,4 +1,11 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Message, ButtonInteraction } from "discord.js";
+import {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  Message,
+  ButtonInteraction,
+} from "discord.js";
 import { getUser, updateBalance } from "../../db.js";
 import { parseBet, fmt, activeGamblers, createDeck, Card } from "./shared.js";
 
@@ -50,7 +57,10 @@ export async function handleBlackjack(message: Message, args: string[]): Promise
 
   const user = await getUser(message.guild!.id, message.author.id, message.author.username);
   const { error, amount } = parseBet(args[0], user.balance);
-  if (error) { message.reply(error); return; }
+  if (error) {
+    message.reply(error);
+    return;
+  }
 
   await updateBalance(message.guild!.id, message.author.id, -amount!);
 
@@ -124,7 +134,10 @@ export async function handleBjButton(interaction: ButtonInteraction): Promise<vo
   }
 
   const game = bjGames.get(userId);
-  if (!game) { interaction.update({ components: [] }); return; }
+  if (!game) {
+    interaction.update({ components: [] });
+    return;
+  }
 
   if (action === "hit") {
     game.player.push(game.deck.pop()!);
@@ -141,7 +154,11 @@ export async function handleBjButton(interaction: ButtonInteraction): Promise<vo
             .setTitle("🃏 블랙잭")
             .addFields(
               { name: "내 패", value: `${bjHandStr(game.player)} (${val})`, inline: false },
-              { name: "딜러 패", value: `${bjHandStr(game.dealer)} (${bjHandVal(game.dealer)})`, inline: false },
+              {
+                name: "딜러 패",
+                value: `${bjHandStr(game.dealer)} (${bjHandVal(game.dealer)})`,
+                inline: false,
+              },
               { name: "결과", value: "💥 버스트! 패배", inline: true },
               { name: "손익", value: fmt(-game.bet), inline: true },
               { name: "현재 잔액", value: `${updated.balance.toLocaleString()}원`, inline: true },

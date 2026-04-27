@@ -60,7 +60,9 @@ export async function handleStatus(message: Message, client: Client): Promise<bo
   ]);
 
   const neisResult: ApiStatus =
-    neis.status === "fulfilled" ? neis.value : { ok: false, error: (neis.reason as Error)?.message };
+    neis.status === "fulfilled"
+      ? neis.value
+      : { ok: false, error: (neis.reason as Error)?.message };
   const dbResult: ApiStatus =
     db.status === "fulfilled" ? db.value : { ok: false, error: (db.reason as Error)?.message };
 
