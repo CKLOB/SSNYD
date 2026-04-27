@@ -23,11 +23,14 @@ let cachedAt = 0;
 function fetchJson(url: string): Promise<any> {
   return new Promise((resolve, reject) => {
     const req = https.get(url, (res) => {
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(`HTTP ${res.statusCode}`));
+      }
       res.setEncoding("utf8");
       let raw = "";
       res.on("data", (c: string) => (raw += c));
       res.on("end", () => {
-        if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`));
         try {
           resolve(JSON.parse(raw));
         } catch (e) {
