@@ -19,7 +19,10 @@ export async function handleAttendance(message: Message): Promise<void> {
   if (user.last_attendance) {
     const lastDate = toKSTDateStr(new Date(user.last_attendance));
     const today = toKSTDateStr(new Date());
-    if (lastDate >= today) { message.reply("⏳ 오늘 이미 출석했습니다. 내일 다시 출석하세요."); return; }
+    if (lastDate >= today) {
+      message.reply("⏳ 오늘 이미 출석했습니다. 내일 다시 출석하세요.");
+      return;
+    }
   }
 
   await updateBalance(guildId, message.author.id, 150000);
@@ -40,7 +43,10 @@ export async function handleWork(message: Message): Promise<void> {
   const guildId = message.guild!.id;
   const user = await getUser(guildId, message.author.id, message.author.username);
   const left = cooldownLeft(user.last_work, 60 * 1000);
-  if (left) { message.reply(`⏳ **${left}** 후에 다시 일할 수 있습니다.`); return; }
+  if (left) {
+    message.reply(`⏳ **${left}** 후에 다시 일할 수 있습니다.`);
+    return;
+  }
 
   const reward = Math.floor(Math.random() * 20001) + 10000;
   await updateBalance(guildId, message.author.id, reward);
@@ -69,10 +75,16 @@ export async function handleBalance(message: Message): Promise<void> {
 export async function handleSupport(message: Message): Promise<void> {
   const guildId = message.guild!.id;
   const user = await getUser(guildId, message.author.id, message.author.username);
-  if (user.balance > 0) { message.reply("❌ 잔액이 0원일 때만 지원금을 받을 수 있습니다."); return; }
+  if (user.balance > 0) {
+    message.reply("❌ 잔액이 0원일 때만 지원금을 받을 수 있습니다.");
+    return;
+  }
 
   const left = cooldownLeft(user.last_support, 60 * 60 * 1000);
-  if (left) { message.reply(`⏳ **${left}** 후에 다시 신청할 수 있습니다.`); return; }
+  if (left) {
+    message.reply(`⏳ **${left}** 후에 다시 신청할 수 있습니다.`);
+    return;
+  }
 
   await updateBalance(guildId, message.author.id, 100000);
   await setField(guildId, message.author.id, "last_support", toMysqlDatetime(new Date()));
@@ -91,12 +103,24 @@ export async function handleSupport(message: Message): Promise<void> {
 export async function handleTransfer(message: Message, args: string[]): Promise<void> {
   const guildId = message.guild!.id;
   const mention = message.mentions.users.first();
-  if (!mention) { message.reply("❌ 송금할 대상을 멘션해주세요. 예) `!송금 @이름 10000`"); return; }
-  if (mention.id === message.author.id) { message.reply("❌ 자기 자신에게는 송금할 수 없습니다."); return; }
-  if (mention.bot) { message.reply("❌ 봇에게는 송금할 수 없습니다."); return; }
+  if (!mention) {
+    message.reply("❌ 송금할 대상을 멘션해주세요. 예) `!송금 @이름 10000`");
+    return;
+  }
+  if (mention.id === message.author.id) {
+    message.reply("❌ 자기 자신에게는 송금할 수 없습니다.");
+    return;
+  }
+  if (mention.bot) {
+    message.reply("❌ 봇에게는 송금할 수 없습니다.");
+    return;
+  }
 
   const amountStr = args[1];
-  if (!amountStr) { message.reply("❌ 송금 금액을 입력하세요. 예) `!송금 @이름 10000`"); return; }
+  if (!amountStr) {
+    message.reply("❌ 송금 금액을 입력하세요. 예) `!송금 @이름 10000`");
+    return;
+  }
 
   const sender = await getUser(guildId, message.author.id, message.author.username);
   const lower = amountStr.toLowerCase();
@@ -107,9 +131,18 @@ export async function handleTransfer(message: Message, args: string[]): Promise<
         ? Math.floor(sender.balance / 2)
         : parseInt(amountStr);
 
-  if (isNaN(amount)) { message.reply("❌ 올바른 금액을 입력하세요."); return; }
-  if (amount < 1000) { message.reply("❌ 최소 송금 금액은 1,000원입니다."); return; }
-  if (amount > sender.balance) { message.reply("❌ 잔액이 부족합니다."); return; }
+  if (isNaN(amount)) {
+    message.reply("❌ 올바른 금액을 입력하세요.");
+    return;
+  }
+  if (amount < 1000) {
+    message.reply("❌ 최소 송금 금액은 1,000원입니다.");
+    return;
+  }
+  if (amount > sender.balance) {
+    message.reply("❌ 잔액이 부족합니다.");
+    return;
+  }
 
   const taxRate = Math.floor(Math.random() * 16) + 1;
   const tax = Math.floor(amount * (taxRate / 100));
