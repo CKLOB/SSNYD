@@ -1,11 +1,11 @@
-import { EmbedBuilder } from "discord.js";
+import { EmbedBuilder, Message } from "discord.js";
 import { getWeatherData } from "./cache.js";
 
-const STATUS_EMOJI = { 맑음: "☀️", 흐림: "☁️", 구름많음: "⛅", 비: "🌧️", 눈: "❄️" };
-const DUST_EMOJI = { 좋음: "🟢", 보통: "🟡", 나쁨: "🔴", 매우나쁨: "🟣" };
+const STATUS_EMOJI: Record<string, string> = { 맑음: "☀️", 흐림: "☁️", 구름많음: "⛅", 비: "🌧️", 눈: "❄️" };
+const DUST_EMOJI: Record<string, string> = { 좋음: "🟢", 보통: "🟡", 나쁨: "🔴", 매우나쁨: "🟣" };
 const COMMANDS = ["!날씨", "!ㄴㅆ"];
 
-export async function handleWeather(message) {
+export async function handleWeather(message: Message): Promise<boolean> {
   if (!COMMANDS.includes(message.content.trim())) return false;
 
   try {
