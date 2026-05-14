@@ -69,9 +69,15 @@ async function handleHelp(message: Message): Promise<boolean> {
       {
         name: "🎧 음악",
         value: [
-          "`!노추` / `!노래` / `!오노추` — 랜덤 노래 추천",
-          "`!노추 [장르]` — 장르별 노래 추천 (케이팝, 팝, 록, 힙합 등)",
-          "`!가수 [키워드]` — 노래/아티스트 검색",
+          "`!play [제목]` — 유튜브에서 검색 후 재생",
+          "`!play url [URL]` — 유튜브 URL로 바로 재생",
+          "`!스킵` — 현재 곡 건너뜀",
+          "`!정지` — 재생 중지 및 음성채널 퇴장",
+          "`!일시정지` / `!재개` — 일시정지 / 재개",
+          "`!큐` / `!대기열` — 재생 대기열 확인",
+          "`!노추` / `!오노추` — Spotify 랜덤 노래 추천",
+          "`!노추 [장르]` — 장르별 노래 추천 (케이팝, 팝, 힙합 등)",
+          "`!가수 [키워드]` — Spotify 노래/아티스트 검색",
         ].join("\n"),
       },
       {
@@ -104,6 +110,7 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildVoiceStates,
   ],
 });
 
