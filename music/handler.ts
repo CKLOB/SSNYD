@@ -259,7 +259,9 @@ export async function handleMusic(message: Message): Promise<boolean> {
         await loadingMsg.delete().catch(() => {});
       } catch (err) {
         console.error("[Music] video_info 오류:", err);
-        await loadingMsg.edit("❌ 영상 정보를 불러올 수 없습니다. URL을 확인해주세요.").catch(() => {});
+        await loadingMsg
+          .edit("❌ 영상 정보를 불러올 수 없습니다. URL을 확인해주세요.")
+          .catch(() => {});
         return true;
       }
     } else {
@@ -282,7 +284,9 @@ export async function handleMusic(message: Message): Promise<boolean> {
         await loadingMsg.delete().catch(() => {});
       } catch (err) {
         console.error("[Music] 검색 오류:", err);
-        await loadingMsg.edit("❌ 검색 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.").catch(() => {});
+        await loadingMsg
+          .edit("❌ 검색 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
+          .catch(() => {});
         return true;
       }
     }

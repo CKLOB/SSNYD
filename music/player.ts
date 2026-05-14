@@ -62,7 +62,9 @@ async function playNext(guildId: string): Promise<void> {
       .addFields(
         { name: "⏱️ 길이", value: item.duration, inline: true },
         { name: "👤 신청자", value: item.requestedBy, inline: true },
-        ...(gp.queue.length > 0 ? [{ name: "📋 대기", value: `${gp.queue.length}곡`, inline: true }] : []),
+        ...(gp.queue.length > 0
+          ? [{ name: "📋 대기", value: `${gp.queue.length}곡`, inline: true }]
+          : []),
       );
     if (item.thumbnail) embed.setThumbnail(item.thumbnail);
     await gp.textChannel.send({ embeds: [embed] });
