@@ -25,6 +25,7 @@ interface GuildPlayer {
   queue: QueueItem[];
   current: QueueItem | null;
   textChannel: GuildTextBasedChannel;
+  leaveTimeout?: ReturnType<typeof setTimeout>;
 }
 
 const players = new Map<string, GuildPlayer>();
@@ -35,7 +36,7 @@ async function playNext(guildId: string): Promise<void> {
 
   if (gp.queue.length === 0) {
     gp.current = null;
-    setTimeout(() => {
+    gp.leaveTimeout = setTimeout(() => {
       const g = players.get(guildId);
       if (g && g.current === null && g.queue.length === 0) {
         try {
@@ -45,6 +46,11 @@ async function playNext(guildId: string): Promise<void> {
       }
     }, 30_000);
     return;
+  }
+
+  if (gp.leaveTimeout) {
+    clearTimeout(gp.leaveTimeout);
+    gp.leaveTimeout = undefined;
   }
 
   const item = gp.queue.shift()!;
@@ -71,7 +77,9 @@ async function playNext(guildId: string): Promise<void> {
   } catch (err) {
     console.error("[Music] 재생 오류:", err);
     gp.current = null;
-    await gp.textChannel.send(`❌ **${item.title}** 재생 중 오류가 발생했습니다. 건너뜁니다.`);
+    await gp.textChannel
+      .send(`❌ **${item.title}** 재생 중 오류가 발생했습니다. 건너뜁니다.`)
+      .catch(() => {});
     await playNext(guildId);
   }
 }
