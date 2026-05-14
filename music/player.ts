@@ -106,28 +106,38 @@ export async function addToQueue(
       throw new Error("음성 채널 연결에 실패했습니다.");
     }
 
-    const player = createAudioPlayer();
-    connection.subscribe(player);
+    const existing = players.get(guildId);
+    if (existing) {
+      connection.destroy();
+      gp = existing;
+    } else {
+      const player = createAudioPlayer();
+      connection.subscribe(player);
 
-    gp = { connection, player, queue: [], current: null, textChannel };
-    players.set(guildId, gp);
+      gp = { connection, player, queue: [], current: null, textChannel };
+      players.set(guildId, gp);
 
-    player.on(AudioPlayerStatus.Idle, () => void playNext(guildId));
+      player.on(AudioPlayerStatus.Idle, () => void playNext(guildId));
+      player.on("error", (error) => {
+        console.error("[Music] Player Error:", error);
+        void playNext(guildId);
+      });
 
-    connection.on(VoiceConnectionStatus.Disconnected, async () => {
-      if (!players.has(guildId)) return;
-      try {
-        await Promise.race([
-          entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
-          entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
-        ]);
-      } catch {
+      connection.on(VoiceConnectionStatus.Disconnected, async () => {
+        if (!players.has(guildId)) return;
         try {
-          connection.destroy();
-        } catch (_) {}
-        players.delete(guildId);
-      }
-    });
+          await Promise.race([
+            entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
+            entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
+          ]);
+        } catch {
+          try {
+            connection.destroy();
+          } catch (_) {}
+          players.delete(guildId);
+        }
+      });
+    }
   } else {
     gp.textChannel = textChannel;
   }
