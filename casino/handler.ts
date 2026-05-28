@@ -106,7 +106,13 @@ export async function handleCasino(message: Message): Promise<boolean> {
         await message.reply("❌ 송금할 대상을 멘션해주세요. 예) `!송금 @이름 10000`");
         return true;
       }
-      await handleTransfer(ctxFromMessage(message), mention.id, mention.username, mention.bot, args[1]);
+      await handleTransfer(
+        ctxFromMessage(message),
+        mention.id,
+        mention.username,
+        mention.bot,
+        args[1],
+      );
       return true;
     }
     case "!코인":
@@ -128,7 +134,10 @@ export async function handleCasino(message: Message): Promise<boolean> {
 
 export async function handleCasinoSlash(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guildId) {
-    await interaction.reply({ content: "❌ 이 명령어는 서버에서만 사용할 수 있습니다.", ephemeral: true });
+    await interaction.reply({
+      content: "❌ 이 명령어는 서버에서만 사용할 수 있습니다.",
+      ephemeral: true,
+    });
     return;
   }
 
@@ -139,11 +148,17 @@ export async function handleCasinoSlash(interaction: ChatInputCommandInteraction
 
   if (GAMBLING_SLASH.has(cmd)) {
     if (!(await getGamblingEnabled(interaction.guildId))) {
-      await interaction.reply({ content: "🔒 현재 서버에서 도박 기능이 비활성화되어 있습니다.", ephemeral: true });
+      await interaction.reply({
+        content: "🔒 현재 서버에서 도박 기능이 비활성화되어 있습니다.",
+        ephemeral: true,
+      });
       return;
     }
     if (isGambling(interaction.user.id)) {
-      await interaction.reply({ content: "🎰 진행 중인 도박 게임이 있습니다. 게임이 끝난 후 이용해주세요.", ephemeral: true });
+      await interaction.reply({
+        content: "🎰 진행 중인 도박 게임이 있습니다. 게임이 끝난 후 이용해주세요.",
+        ephemeral: true,
+      });
       return;
     }
   }
@@ -154,13 +169,18 @@ export async function handleCasinoSlash(interaction: ChatInputCommandInteraction
       if (subCmd === "on" || subCmd === "off") {
         const member = interaction.member instanceof GuildMember ? interaction.member : null;
         if (!member?.permissions.has(PermissionFlagsBits.Administrator)) {
-          await interaction.reply({ content: "❌ 서버 관리자 권한이 필요합니다.", ephemeral: true });
+          await interaction.reply({
+            content: "❌ 서버 관리자 권한이 필요합니다.",
+            ephemeral: true,
+          });
           return;
         }
         const enable = subCmd === "on";
         await setGamblingEnabled(interaction.guildId, enable);
         await interaction.reply(
-          enable ? "✅ 도박 기능이 **활성화**되었습니다." : "🔒 도박 기능이 **비활성화**되었습니다.",
+          enable
+            ? "✅ 도박 기능이 **활성화**되었습니다."
+            : "🔒 도박 기능이 **비활성화**되었습니다.",
         );
       } else {
         const enabled = await getGamblingEnabled(interaction.guildId);

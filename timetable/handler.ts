@@ -176,7 +176,9 @@ export async function handleTimetable(message: Message): Promise<boolean> {
   return true;
 }
 
-export async function handleTimetableSlash(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function handleTimetableSlash(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
   const input = interaction.options.getString("학년반");
 
   let grade: number, classNum: number;
@@ -196,15 +198,23 @@ export async function handleTimetableSlash(interaction: ChatInputCommandInteract
   } else {
     const member = interaction.member instanceof GuildMember ? interaction.member : null;
     if (!member) {
-      await interaction.reply("❌ 반 역할 정보를 가져올 수 없습니다. 직접 학년-반을 입력해주세요. (예: `2-3`)");
+      await interaction.reply(
+        "❌ 반 역할 정보를 가져올 수 없습니다. 직접 학년-반을 입력해주세요. (예: `2-3`)",
+      );
       return;
     }
     let found: ClassInfo | null = null;
     for (const role of member.roles.cache.values()) {
       const simpleMatch = role.name.match(/^(\d+)반$/);
-      if (simpleMatch) { found = { grade: 2, classNum: parseInt(simpleMatch[1]) }; break; }
+      if (simpleMatch) {
+        found = { grade: 2, classNum: parseInt(simpleMatch[1]) };
+        break;
+      }
       const fullMatch = role.name.match(/^(\d+)-(\d+)$/);
-      if (fullMatch) { found = { grade: parseInt(fullMatch[1]), classNum: parseInt(fullMatch[2]) }; break; }
+      if (fullMatch) {
+        found = { grade: parseInt(fullMatch[1]), classNum: parseInt(fullMatch[2]) };
+        break;
+      }
     }
     if (!found) {
       await interaction.reply("❌ 반 역할이 없습니다. (예: `1반`, `2-1`) 관리자에게 문의하세요.");

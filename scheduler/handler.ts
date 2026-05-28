@@ -177,9 +177,14 @@ export async function handleScheduler(message: Message): Promise<boolean> {
   return false;
 }
 
-export async function handleSchedulerSlash(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function handleSchedulerSlash(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
   if (!interaction.guildId) {
-    await interaction.reply({ content: "❌ 이 명령어는 서버에서만 사용할 수 있습니다.", ephemeral: true });
+    await interaction.reply({
+      content: "❌ 이 명령어는 서버에서만 사용할 수 있습니다.",
+      ephemeral: true,
+    });
     return;
   }
 
@@ -207,7 +212,9 @@ export async function handleSchedulerSlash(interaction: ChatInputCommandInteract
       await addSchedule(guildId, channel.id, channel.name, msg, hour, minute);
       const hh = String(hour).padStart(2, "0");
       const mm = String(minute).padStart(2, "0");
-      await interaction.reply(`✅ 매일 **${hh}:${mm}**에 **#${channel.name}** 채널로 메세지를 보낼게요.`);
+      await interaction.reply(
+        `✅ 매일 **${hh}:${mm}**에 **#${channel.name}** 채널로 메세지를 보낼게요.`,
+      );
       break;
     }
 

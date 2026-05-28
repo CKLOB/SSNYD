@@ -82,7 +82,12 @@ function fetchMeal(dateStr: string, mealType: number): Promise<MealResult | null
   });
 }
 
-async function executeMeal(ctx: Ctx, mealType: number, dateStr: string, dayLabel: string): Promise<void> {
+async function executeMeal(
+  ctx: Ctx,
+  mealType: number,
+  dateStr: string,
+  dayLabel: string,
+): Promise<void> {
   try {
     const result = await fetchWithRetry(() => fetchMeal(dateStr, mealType));
     if (result) {

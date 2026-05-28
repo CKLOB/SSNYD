@@ -148,10 +148,30 @@ process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
 const GUILD_ONLY = new Set([
-  "출석", "일", "잔액", "지원금", "랭킹", "송금", "도박",
-  "코인", "블랙잭", "바카라", "룰렛",
-  "시간표", "보내기", "알림목록", "알림삭제", "알림삭제전체",
-  "play", "스킵", "정지", "일시정지", "재개", "큐", "노추", "가수",
+  "출석",
+  "일",
+  "잔액",
+  "지원금",
+  "랭킹",
+  "송금",
+  "도박",
+  "코인",
+  "블랙잭",
+  "바카라",
+  "룰렛",
+  "시간표",
+  "보내기",
+  "알림목록",
+  "알림삭제",
+  "알림삭제전체",
+  "play",
+  "스킵",
+  "정지",
+  "일시정지",
+  "재개",
+  "큐",
+  "노추",
+  "가수",
 ]);
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -162,7 +182,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   if (!interaction.guildId && GUILD_ONLY.has(interaction.commandName)) {
-    await interaction.reply({ content: "❌ 이 명령어는 서버에서만 사용할 수 있습니다.", ephemeral: true });
+    await interaction.reply({
+      content: "❌ 이 명령어는 서버에서만 사용할 수 있습니다.",
+      ephemeral: true,
+    });
     return;
   }
 

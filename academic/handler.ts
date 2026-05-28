@@ -120,6 +120,6 @@ export async function handleAcademic(message: Message): Promise<boolean> {
 export async function handleAcademicSlash(interaction: ChatInputCommandInteraction): Promise<void> {
   const now = kstNow();
   const year = now.getUTCFullYear();
-  const month = interaction.options.getInteger("월") ?? (now.getUTCMonth() + 1);
+  const month = interaction.options.getInteger("월") ?? now.getUTCMonth() + 1;
   await executeAcademic(ctxFromInteraction(interaction), year, month);
 }

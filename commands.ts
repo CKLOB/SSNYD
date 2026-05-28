@@ -1,4 +1,9 @@
-import { REST, Routes, SlashCommandBuilder, RESTPostAPIApplicationCommandsJSONBody } from "discord.js";
+import {
+  REST,
+  Routes,
+  SlashCommandBuilder,
+  RESTPostAPIApplicationCommandsJSONBody,
+} from "discord.js";
 
 const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
   new SlashCommandBuilder().setName("밥").setDescription("현재 시간대 급식을 확인합니다").toJSON(),
@@ -50,26 +55,39 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
     )
     .toJSON(),
 
-  new SlashCommandBuilder().setName("날씨").setDescription("현재 날씨 및 미세먼지를 확인합니다").toJSON(),
+  new SlashCommandBuilder()
+    .setName("날씨")
+    .setDescription("현재 날씨 및 미세먼지를 확인합니다")
+    .toJSON(),
 
-  new SlashCommandBuilder().setName("상태").setDescription("봇 업타임, 핑, 메모리, API 상태를 확인합니다").toJSON(),
+  new SlashCommandBuilder()
+    .setName("상태")
+    .setDescription("봇 업타임, 핑, 메모리, API 상태를 확인합니다")
+    .toJSON(),
 
-  new SlashCommandBuilder().setName("출석").setDescription("매일 출석 체크 (150,000원 지급)").toJSON(),
+  new SlashCommandBuilder()
+    .setName("출석")
+    .setDescription("매일 출석 체크 (150,000원 지급)")
+    .toJSON(),
 
-  new SlashCommandBuilder().setName("일").setDescription("10,000~30,000원 벌기 (1분 쿨다운)").toJSON(),
+  new SlashCommandBuilder()
+    .setName("일")
+    .setDescription("10,000~30,000원 벌기 (1분 쿨다운)")
+    .toJSON(),
 
   new SlashCommandBuilder().setName("잔액").setDescription("내 잔액을 확인합니다").toJSON(),
 
-  new SlashCommandBuilder().setName("지원금").setDescription("잔액 0원일 때 100,000원 지원금 신청").toJSON(),
+  new SlashCommandBuilder()
+    .setName("지원금")
+    .setDescription("잔액 0원일 때 100,000원 지원금 신청")
+    .toJSON(),
 
   new SlashCommandBuilder().setName("랭킹").setDescription("서버 잔액 TOP 10 랭킹").toJSON(),
 
   new SlashCommandBuilder()
     .setName("송금")
     .setDescription("다른 유저에게 송금합니다")
-    .addUserOption((opt) =>
-      opt.setName("대상").setDescription("송금할 대상").setRequired(true),
-    )
+    .addUserOption((opt) => opt.setName("대상").setDescription("송금할 대상").setRequired(true))
     .addStringOption((opt) =>
       opt.setName("금액").setDescription("송금할 금액 (숫자, 올인, 반)").setRequired(true),
     )
@@ -123,16 +141,16 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
     .setName("play")
     .setDescription("유튜브에서 음악을 검색하거나 URL로 재생합니다")
     .addStringOption((opt) =>
-      opt
-        .setName("검색어")
-        .setDescription("검색할 제목 또는 유튜브 URL")
-        .setRequired(true),
+      opt.setName("검색어").setDescription("검색할 제목 또는 유튜브 URL").setRequired(true),
     )
     .toJSON(),
 
   new SlashCommandBuilder().setName("스킵").setDescription("현재 곡을 건너뜁니다").toJSON(),
 
-  new SlashCommandBuilder().setName("정지").setDescription("재생을 정지하고 음성채널에서 나갑니다").toJSON(),
+  new SlashCommandBuilder()
+    .setName("정지")
+    .setDescription("재생을 정지하고 음성채널에서 나갑니다")
+    .toJSON(),
 
   new SlashCommandBuilder().setName("일시정지").setDescription("재생을 일시정지합니다").toJSON(),
 
@@ -185,7 +203,10 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
     )
     .toJSON(),
 
-  new SlashCommandBuilder().setName("알림목록").setDescription("등록된 알림 목록을 확인합니다").toJSON(),
+  new SlashCommandBuilder()
+    .setName("알림목록")
+    .setDescription("등록된 알림 목록을 확인합니다")
+    .toJSON(),
 
   new SlashCommandBuilder()
     .setName("알림삭제")
@@ -195,9 +216,15 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
     )
     .toJSON(),
 
-  new SlashCommandBuilder().setName("알림삭제전체").setDescription("이 서버의 알림을 전체 삭제합니다").toJSON(),
+  new SlashCommandBuilder()
+    .setName("알림삭제전체")
+    .setDescription("이 서버의 알림을 전체 삭제합니다")
+    .toJSON(),
 
-  new SlashCommandBuilder().setName("명령어").setDescription("사용 가능한 명령어 목록을 확인합니다").toJSON(),
+  new SlashCommandBuilder()
+    .setName("명령어")
+    .setDescription("사용 가능한 명령어 목록을 확인합니다")
+    .toJSON(),
 ];
 
 export async function registerCommands(clientId: string, guildId?: string): Promise<void> {

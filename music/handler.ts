@@ -420,7 +420,8 @@ export async function handleMusicSlash(interaction: ChatInputCommandInteraction)
     const genreInput = interaction.options.getString("장르") ?? null;
     const GENRE_ARTISTS_LOCAL = GENRE_ARTISTS;
     const GENRE_LIST_LOCAL = GENRE_LIST;
-    const genreKey = genreInput ?? GENRE_LIST_LOCAL[Math.floor(Math.random() * GENRE_LIST_LOCAL.length)];
+    const genreKey =
+      genreInput ?? GENRE_LIST_LOCAL[Math.floor(Math.random() * GENRE_LIST_LOCAL.length)];
 
     await interaction.deferReply();
     try {
@@ -556,29 +557,42 @@ export async function handleMusicSlash(interaction: ChatInputCommandInteraction)
 
   // ── /스킵 /정지 /일시정지 /재개 /큐 ─────────────────────────────────────────
   if (!guildId) {
-    await interaction.reply({ content: "❌ 이 명령어는 서버에서만 사용할 수 있습니다.", ephemeral: true });
+    await interaction.reply({
+      content: "❌ 이 명령어는 서버에서만 사용할 수 있습니다.",
+      ephemeral: true,
+    });
     return;
   }
 
   switch (cmd) {
     case "스킵": {
       const skipped = skip(guildId);
-      await interaction.reply(skipped ? `⏭️ **${skipped.title}** 건너뜁니다.` : "📭 현재 재생 중인 곡이 없습니다.");
+      await interaction.reply(
+        skipped ? `⏭️ **${skipped.title}** 건너뜁니다.` : "📭 현재 재생 중인 곡이 없습니다.",
+      );
       break;
     }
     case "정지": {
       const stopped = stop(guildId);
-      await interaction.reply(stopped ? "⏹️ 재생을 정지하고 음성 채널에서 나갑니다." : "📭 현재 재생 중인 곡이 없습니다.");
+      await interaction.reply(
+        stopped ? "⏹️ 재생을 정지하고 음성 채널에서 나갑니다." : "📭 현재 재생 중인 곡이 없습니다.",
+      );
       break;
     }
     case "일시정지": {
       const paused = pause(guildId);
-      await interaction.reply(paused ? "⏸️ 일시정지했습니다. `/재개` 로 이어서 재생할 수 있습니다." : "📭 일시정지할 수 있는 곡이 없습니다.");
+      await interaction.reply(
+        paused
+          ? "⏸️ 일시정지했습니다. `/재개` 로 이어서 재생할 수 있습니다."
+          : "📭 일시정지할 수 있는 곡이 없습니다.",
+      );
       break;
     }
     case "재개": {
       const resumed = resume(guildId);
-      await interaction.reply(resumed ? "▶️ 재생을 재개합니다." : "📭 재개할 수 있는 곡이 없습니다.");
+      await interaction.reply(
+        resumed ? "▶️ 재생을 재개합니다." : "📭 재개할 수 있는 곡이 없습니다.",
+      );
       break;
     }
     case "큐": {
