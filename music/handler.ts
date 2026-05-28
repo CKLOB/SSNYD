@@ -499,7 +499,7 @@ export async function handleMusicSlash(interaction: ChatInputCommandInteraction)
         const d = info.video_details;
         item = {
           title: d.title ?? "알 수 없음",
-          url: d.url,
+          url: d.url ?? arg,
           requestedBy: interaction.user.username,
           duration: d.durationRaw ?? "?:??",
           thumbnail: d.thumbnails?.[0]?.url,
@@ -517,6 +517,11 @@ export async function handleMusicSlash(interaction: ChatInputCommandInteraction)
           return;
         }
         const video = results[0];
+        if (!video.url) {
+          console.error("[Music] 검색 결과 URL 없음:", video);
+          await interaction.editReply(`😢 **${arg}** 에 대한 재생 가능한 영상을 찾지 못했습니다.`);
+          return;
+        }
         item = {
           title: video.title ?? "알 수 없음",
           url: video.url,

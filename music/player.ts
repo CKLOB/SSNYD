@@ -13,7 +13,7 @@ import play from "play-dl";
 
 export interface QueueItem {
   title: string;
-  url: string;
+  url?: string;
   requestedBy: string;
   duration: string;
   thumbnail?: string;
