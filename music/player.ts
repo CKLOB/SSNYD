@@ -56,6 +56,16 @@ async function playNext(guildId: string): Promise<void> {
   const item = gp.queue.shift()!;
   gp.current = item;
 
+  if (!item.url) {
+    console.error("[Music] 트랙 URL이 없습니다:", item);
+    gp.current = null;
+    await gp.textChannel
+      .send(`❌ **${item.title}** - URL이 없어 건너뜁니다.`)
+      .catch(() => {});
+    await playNext(guildId);
+    return;
+  }
+
   try {
     const stream = await play.stream(item.url, { quality: 2 });
     const resource = createAudioResource(stream.stream, { inputType: stream.type });
