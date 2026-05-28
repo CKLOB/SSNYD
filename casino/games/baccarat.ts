@@ -3,11 +3,11 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  Message,
   ButtonInteraction,
 } from "discord.js";
 import { getUser, updateBalance } from "../../db.js";
 import { sleep, parseBet, fmt, activeGamblers, createDeck, Card } from "./shared.js";
+import { Ctx } from "../../ctx.js";
 
 type BacSide = "player" | "banker" | "tie";
 
@@ -62,15 +62,15 @@ function runBaccarat(): BaccaratResult {
   return { player, banker, pVal, bVal, winner };
 }
 
-export async function handleBaccarat(message: Message, args: string[]): Promise<void> {
-  const user = await getUser(message.guild!.id, message.author.id, message.author.username);
+export async function handleBaccarat(ctx: Ctx, args: string[]): Promise<void> {
+  const user = await getUser(ctx.guildId!, ctx.authorId, ctx.username);
   const { error, amount } = parseBet(args[0], user.balance);
   if (error) {
-    message.reply(error);
+    ctx.reply(error);
     return;
   }
 
-  const uid = message.author.id;
+  const uid = ctx.authorId;
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`bac_player_${uid}_${amount}`)
@@ -87,7 +87,7 @@ export async function handleBaccarat(message: Message, args: string[]): Promise<
   );
 
   activeGamblers.add(uid);
-  message.reply({
+  ctx.reply({
     embeds: [
       new EmbedBuilder()
         .setColor(0x3b82f6)

@@ -1,6 +1,7 @@
 import https from "https";
-import { EmbedBuilder, Message } from "discord.js";
+import { EmbedBuilder, Message, ChatInputCommandInteraction } from "discord.js";
 import { kstNow, NEIS_KEY, ATPT_CODE, SCHOOL_CODE, fetchWithRetry } from "../utils.js";
+import { Ctx, ctxFromMessage, ctxFromInteraction } from "../ctx.js";
 
 interface ScheduleRow {
   AA_YMD: string;
@@ -47,6 +48,49 @@ function fetchAcademicSchedule(year: number, month: number): Promise<ScheduleRow
   });
 }
 
+async function executeAcademic(ctx: Ctx, year: number, month: number): Promise<void> {
+  try {
+    const rows = await fetchWithRetry(() => fetchAcademicSchedule(year, month));
+
+    if (rows.length === 0) {
+      const embed = new EmbedBuilder()
+        .setColor(0x6b7280)
+        .setTitle(`📅 ${year}년 ${month}월 학사일정`)
+        .setDescription("이번 달 등록된 학사일정이 없어!")
+        .setFooter({ text: "NEIS 학사일정" });
+      await ctx.reply({ embeds: [embed] });
+      return;
+    }
+
+    const byDay = new Map<number, Set<string>>();
+    for (const row of rows) {
+      const day = parseInt(row.AA_YMD.slice(6, 8), 10);
+      if (!byDay.has(day)) byDay.set(day, new Set());
+      byDay.get(day)!.add(row.EVENT_NM);
+    }
+
+    const lines = [...byDay.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([day, events]) => `**${day}일** ㅡ ${[...events].join(", ")}`);
+
+    const embed = new EmbedBuilder()
+      .setColor(0x3b82f6)
+      .setTitle(`📅 ${year}년 ${month}월 학사일정`)
+      .setDescription(lines.join("\n"))
+      .setFooter({ text: "NEIS 학사일정" })
+      .setTimestamp();
+
+    await ctx.reply({ embeds: [embed] });
+  } catch (err) {
+    const embed = new EmbedBuilder()
+      .setColor(0xef4444)
+      .setTitle("❌ 오류 발생")
+      .setDescription("학사일정을 불러오는 중 오류가 발생했어!")
+      .setFooter({ text: (err as Error).message });
+    await ctx.reply({ embeds: [embed] });
+  }
+}
+
 export async function handleAcademic(message: Message): Promise<boolean> {
   const content = message.content.trim();
   if (!content.startsWith("!학사일정")) return false;
@@ -69,46 +113,13 @@ export async function handleAcademic(message: Message): Promise<boolean> {
     }
   }
 
-  try {
-    const rows = await fetchWithRetry(() => fetchAcademicSchedule(year, month));
-
-    if (rows.length === 0) {
-      const embed = new EmbedBuilder()
-        .setColor(0x6b7280)
-        .setTitle(`📅 ${year}년 ${month}월 학사일정`)
-        .setDescription("이번 달 등록된 학사일정이 없어!")
-        .setFooter({ text: "NEIS 학사일정" });
-      await message.reply({ embeds: [embed] });
-      return true;
-    }
-
-    const byDay = new Map<number, Set<string>>();
-    for (const row of rows) {
-      const day = parseInt(row.AA_YMD.slice(6, 8), 10);
-      if (!byDay.has(day)) byDay.set(day, new Set());
-      byDay.get(day)!.add(row.EVENT_NM);
-    }
-
-    const lines = [...byDay.entries()]
-      .sort((a, b) => a[0] - b[0])
-      .map(([day, events]) => `**${day}일** ㅡ ${[...events].join(", ")}`);
-
-    const embed = new EmbedBuilder()
-      .setColor(0x3b82f6)
-      .setTitle(`📅 ${year}년 ${month}월 학사일정`)
-      .setDescription(lines.join("\n"))
-      .setFooter({ text: "NEIS 학사일정" })
-      .setTimestamp();
-
-    await message.reply({ embeds: [embed] });
-  } catch (err) {
-    const embed = new EmbedBuilder()
-      .setColor(0xef4444)
-      .setTitle("❌ 오류 발생")
-      .setDescription("학사일정을 불러오는 중 오류가 발생했어!")
-      .setFooter({ text: (err as Error).message });
-    await message.reply({ embeds: [embed] });
-  }
-
+  await executeAcademic(ctxFromMessage(message), year, month);
   return true;
+}
+
+export async function handleAcademicSlash(interaction: ChatInputCommandInteraction): Promise<void> {
+  const now = kstNow();
+  const year = now.getUTCFullYear();
+  const month = interaction.options.getInteger("월") ?? now.getUTCMonth() + 1;
+  await executeAcademic(ctxFromInteraction(interaction), year, month);
 }

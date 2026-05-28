@@ -1,5 +1,6 @@
-import { EmbedBuilder, Message } from "discord.js";
+import { EmbedBuilder, Message, ChatInputCommandInteraction } from "discord.js";
 import { getWeatherData } from "./cache.js";
+import { Ctx, ctxFromMessage, ctxFromInteraction } from "../ctx.js";
 
 const STATUS_EMOJI: Record<string, string> = {
   맑음: "☀️",
@@ -11,9 +12,7 @@ const STATUS_EMOJI: Record<string, string> = {
 const DUST_EMOJI: Record<string, string> = { 좋음: "🟢", 보통: "🟡", 나쁨: "🔴", 매우나쁨: "🟣" };
 const COMMANDS = ["!날씨", "!ㄴㅆ"];
 
-export async function handleWeather(message: Message): Promise<boolean> {
-  if (!COMMANDS.includes(message.content.trim())) return false;
-
+async function executeWeather(ctx: Ctx): Promise<void> {
   try {
     const d = await getWeatherData();
     const embed = new EmbedBuilder()
@@ -25,10 +24,19 @@ export async function handleWeather(message: Message): Promise<boolean> {
         { name: "🔺 최고 / 🔻 최저", value: `${d.temp_max}°C / ${d.temp_min}°C`, inline: true },
         { name: "🌫️ 미세먼지", value: `${DUST_EMOJI[d.dust] ?? "🟡"} ${d.dust}`, inline: false },
       );
-    await message.reply({ embeds: [embed] });
+    await ctx.reply({ embeds: [embed] });
   } catch (err) {
     console.error("[Weather]", err);
-    await message.reply("❌ 날씨 정보를 불러오지 못했습니다.");
+    await ctx.reply("❌ 날씨 정보를 불러오지 못했습니다.");
   }
+}
+
+export async function handleWeather(message: Message): Promise<boolean> {
+  if (!COMMANDS.includes(message.content.trim())) return false;
+  await executeWeather(ctxFromMessage(message));
   return true;
+}
+
+export async function handleWeatherSlash(interaction: ChatInputCommandInteraction): Promise<void> {
+  await executeWeather(ctxFromInteraction(interaction));
 }
