@@ -39,10 +39,10 @@ async function playNext(guildId: string): Promise<void> {
     gp.leaveTimeout = setTimeout(() => {
       const g = players.get(guildId);
       if (g && g.current === null && g.queue.length === 0) {
+        players.delete(guildId);
         try {
           g.connection.destroy();
         } catch (_) {}
-        players.delete(guildId);
       }
     }, 30_000);
     return;
@@ -131,10 +131,10 @@ export async function addToQueue(
             entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
           ]);
         } catch {
+          players.delete(guildId);
           try {
             connection.destroy();
           } catch (_) {}
-          players.delete(guildId);
         }
       });
     }
@@ -166,10 +166,10 @@ export function stop(guildId: string): boolean {
   gp.queue = [];
   gp.current = null;
   gp.player.stop(true);
+  players.delete(guildId);
   try {
     gp.connection.destroy();
   } catch (_) {}
-  players.delete(guildId);
   return true;
 }
 

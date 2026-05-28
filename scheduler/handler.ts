@@ -44,7 +44,14 @@ export function initScheduler(client: Client): void {
 
     for (const s of schedules) {
       if (h === s.hour && min === s.minute) {
-        const channel = client.channels.cache.get(s.channel_id);
+        let channel = client.channels.cache.get(s.channel_id);
+        if (!channel) {
+          try {
+            channel = (await client.channels.fetch(s.channel_id)) ?? undefined;
+          } catch (e) {
+            console.error(`채널 페치 실패 (채널 ${s.channel_id}):`, (e as Error).message);
+          }
+        }
         if (channel?.isTextBased()) {
           (channel as TextChannel).send(s.message).catch((e: Error) => {
             console.error(`메시지 전송 실패 (채널 ${s.channel_id}):`, e.message);
@@ -197,7 +204,7 @@ export async function handleSchedulerSlash(
       const msg = interaction.options.getString("메시지", true);
       const time = interaction.options.getString("시간", true);
 
-      const match = time.match(/^(\d{2}):(\d{2})$/);
+      const match = time.match(/^(\d{1,2}):(\d{2})$/);
       if (!match) {
         await interaction.reply("❌ 시간 형식이 올바르지 않습니다. 예: `08:30`");
         return;
