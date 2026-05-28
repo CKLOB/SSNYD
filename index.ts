@@ -6,22 +6,30 @@ import {
   EmbedBuilder,
   Message,
   ButtonInteraction,
+  ChatInputCommandInteraction,
 } from "discord.js";
-import { handleCasino, handleButtonInteraction } from "./casino/handler.js";
-import { handleMeal } from "./meal/handler.js";
-import { handleScheduler, initScheduler } from "./scheduler/handler.js";
-import { handleTimetable } from "./timetable/handler.js";
+import { handleCasino, handleButtonInteraction, handleCasinoSlash } from "./casino/handler.js";
+import { handleMeal, handleMealSlash } from "./meal/handler.js";
+import { handleScheduler, initScheduler, handleSchedulerSlash } from "./scheduler/handler.js";
+import { handleTimetable, handleTimetableSlash } from "./timetable/handler.js";
 import { init as initDb } from "./db.js";
 import { handleRandom } from "./random/handler.js";
-import { handleMusic } from "./music/handler.js";
-import { handleStatus } from "./status/handler.js";
-import { handleAcademic } from "./academic/handler.js";
-import { handleWeather } from "./weather/handler.js";
+import { handleMusic, handleMusicSlash } from "./music/handler.js";
+import { handleStatus, handleStatusSlash } from "./status/handler.js";
+import { handleAcademic, handleAcademicSlash } from "./academic/handler.js";
+import { handleWeather, handleWeatherSlash } from "./weather/handler.js";
 import { sendBotStatus } from "./webhook.js";
+import { registerCommands } from "./commands.js";
 
 async function handleHelp(message: Message): Promise<boolean> {
   if (message.content.trim() !== "!명령어") return false;
-  const embed = new EmbedBuilder()
+  const embed = buildHelpEmbed();
+  message.reply({ embeds: [embed] });
+  return true;
+}
+
+function buildHelpEmbed(): EmbedBuilder {
+  return new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle("📖 명령어 목록")
     .addFields(
@@ -99,8 +107,11 @@ async function handleHelp(message: Message): Promise<boolean> {
         ].join("\n"),
       },
     );
-  message.reply({ embeds: [embed] });
-  return true;
+}
+
+async function handleHelpSlash(interaction: ChatInputCommandInteraction): Promise<void> {
+  const embed = buildHelpEmbed();
+  await interaction.reply({ embeds: [embed] });
 }
 
 const token = process.env.DISCORD_TOKEN;
@@ -120,6 +131,9 @@ client.once(Events.ClientReady, async (readyClient) => {
     await initDb();
     initScheduler(readyClient);
     await sendBotStatus("online");
+    const clientId = readyClient.user.id;
+    const guildId = process.env.GUILD_ID;
+    await registerCommands(clientId, guildId).catch(console.error);
   } catch (e) {
     console.error("DB 연결 실패:", (e as Error).message);
   }
@@ -133,9 +147,77 @@ async function shutdown(): Promise<void> {
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
+const GUILD_ONLY = new Set([
+  "출석", "일", "잔액", "지원금", "랭킹", "송금", "도박",
+  "코인", "블랙잭", "바카라", "룰렛",
+  "시간표", "보내기", "알림목록", "알림삭제", "알림삭제전체",
+  "play", "스킵", "정지", "일시정지", "재개", "큐", "노추", "가수",
+]);
+
 client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isButton()) return;
-  await handleButtonInteraction(interaction as ButtonInteraction);
+  if (interaction.isButton()) {
+    await handleButtonInteraction(interaction as ButtonInteraction);
+    return;
+  }
+  if (!interaction.isChatInputCommand()) return;
+
+  if (!interaction.guildId && GUILD_ONLY.has(interaction.commandName)) {
+    await interaction.reply({ content: "❌ 이 명령어는 서버에서만 사용할 수 있습니다.", ephemeral: true });
+    return;
+  }
+
+  const i = interaction as ChatInputCommandInteraction;
+
+  switch (i.commandName) {
+    case "밥":
+    case "급식":
+      await handleMealSlash(i);
+      break;
+    case "시간표":
+      await handleTimetableSlash(i);
+      break;
+    case "학사일정":
+      await handleAcademicSlash(i);
+      break;
+    case "날씨":
+      await handleWeatherSlash(i);
+      break;
+    case "상태":
+      await handleStatusSlash(i, client);
+      break;
+    case "출석":
+    case "일":
+    case "잔액":
+    case "지원금":
+    case "랭킹":
+    case "송금":
+    case "도박":
+    case "코인":
+    case "블랙잭":
+    case "바카라":
+    case "룰렛":
+      await handleCasinoSlash(i);
+      break;
+    case "play":
+    case "스킵":
+    case "정지":
+    case "일시정지":
+    case "재개":
+    case "큐":
+    case "노추":
+    case "가수":
+      await handleMusicSlash(i);
+      break;
+    case "보내기":
+    case "알림목록":
+    case "알림삭제":
+    case "알림삭제전체":
+      await handleSchedulerSlash(i);
+      break;
+    case "명령어":
+      await handleHelpSlash(i);
+      break;
+  }
 });
 
 client.on(Events.MessageCreate, async (message) => {
