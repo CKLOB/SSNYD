@@ -5,11 +5,12 @@ import {
   VoiceConnectionStatus,
   createAudioPlayer,
   createAudioResource,
+  demuxProbe,
   entersState,
   joinVoiceChannel,
 } from "@discordjs/voice";
 import { EmbedBuilder, GuildTextBasedChannel, VoiceBasedChannel } from "discord.js";
-import play from "play-dl";
+import youtubeDl from "youtube-dl-exec";
 
 export interface QueueItem {
   title: string;
@@ -25,20 +26,32 @@ interface GuildPlayer {
   queue: QueueItem[];
   current: QueueItem | null;
   textChannel: GuildTextBasedChannel;
+  ytdlProcess?: ReturnType<typeof youtubeDl.exec>;
   leaveTimeout?: ReturnType<typeof setTimeout>;
 }
 
 const players = new Map<string, GuildPlayer>();
 
+function killYtdlProcess(gp: GuildPlayer): void {
+  if (!gp.ytdlProcess || gp.ytdlProcess.killed) return;
+  try {
+    gp.ytdlProcess.kill("SIGKILL");
+  } catch (_) {}
+  gp.ytdlProcess = undefined;
+}
+
 async function playNext(guildId: string): Promise<void> {
   const gp = players.get(guildId);
   if (!gp) return;
+
+  killYtdlProcess(gp);
 
   if (gp.queue.length === 0) {
     gp.current = null;
     gp.leaveTimeout = setTimeout(() => {
       const g = players.get(guildId);
       if (g && g.current === null && g.queue.length === 0) {
+        killYtdlProcess(g);
         players.delete(guildId);
         try {
           g.connection.destroy();
@@ -67,8 +80,32 @@ async function playNext(guildId: string): Promise<void> {
   }
 
   try {
-    const stream = await play.stream(item.url, { quality: 2 });
-    const resource = createAudioResource(stream.stream, { inputType: stream.type });
+    const subprocess = youtubeDl.exec(
+      item.url,
+      {
+        format: "bestaudio[acodec=opus]/bestaudio",
+        output: "-",
+        quiet: true,
+        noWarnings: true,
+        noPlaylist: true,
+      },
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    gp.ytdlProcess = subprocess;
+
+    let stderr = "";
+    subprocess.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    void subprocess.catch((err: unknown) => {
+      if (gp.ytdlProcess === subprocess) {
+        console.error("[Music] yt-dlp 프로세스 오류:", err, stderr.slice(0, 500));
+      }
+    });
+
+    if (!subprocess.stdout) throw new Error("yt-dlp stdout 스트림을 열 수 없습니다.");
+    const probe = await demuxProbe(subprocess.stdout);
+    const resource = createAudioResource(probe.stream, { inputType: probe.type });
     gp.player.play(resource);
 
     const embed = new EmbedBuilder()
@@ -124,12 +161,14 @@ export async function addToQueue(
       const player = createAudioPlayer();
       connection.subscribe(player);
 
-      gp = { connection, player, queue: [], current: null, textChannel };
-      players.set(guildId, gp);
+      const newGp: GuildPlayer = { connection, player, queue: [], current: null, textChannel };
+      gp = newGp;
+      players.set(guildId, newGp);
 
       player.on(AudioPlayerStatus.Idle, () => void playNext(guildId));
       player.on("error", (error) => {
         console.error("[Music] Player Error:", error);
+        killYtdlProcess(newGp);
         void playNext(guildId);
       });
 
@@ -142,6 +181,7 @@ export async function addToQueue(
           ]);
         } catch {
           players.delete(guildId);
+          killYtdlProcess(newGp);
           try {
             connection.destroy();
           } catch (_) {}
@@ -175,6 +215,7 @@ export function stop(guildId: string): boolean {
   if (!gp) return false;
   gp.queue = [];
   gp.current = null;
+  killYtdlProcess(gp);
   gp.player.stop(true);
   players.delete(guildId);
   try {
