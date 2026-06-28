@@ -20,18 +20,21 @@ interface BjGame {
 
 const bjGames = new Map<string, BjGame>();
 
-setInterval(() => {
-  const now = Date.now();
-  for (const [userId, game] of bjGames) {
-    if (now - game.createdAt > 15 * 60 * 1000) {
-      bjGames.delete(userId);
-      activeGamblers.delete(userId);
-      updateBalance(game.guildId, userId, game.bet).catch((e: Error) => {
-        console.error(`[BJ TTL] 환불 실패 (user ${userId}):`, e.message);
-      });
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [userId, game] of bjGames) {
+      if (now - game.createdAt > 15 * 60 * 1000) {
+        bjGames.delete(userId);
+        activeGamblers.delete(userId);
+        updateBalance(game.guildId, userId, game.bet).catch((e: Error) => {
+          console.error(`[BJ TTL] 환불 실패 (user ${userId}):`, e.message);
+        });
+      }
     }
-  }
-}, 5 * 60 * 1000);
+  },
+  5 * 60 * 1000,
+);
 
 function bjVal(card: Card): number {
   if (card.v === "A") return 11;

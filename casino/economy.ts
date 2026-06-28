@@ -121,7 +121,10 @@ export async function handleTransfer(
   }
 
   const sender = await getUser(guildId, ctx.authorId, ctx.username);
-  const { error: parseErr, amount: parsedAmount } = parseAmountInput(amountStr || undefined, sender.balance);
+  const { error: parseErr, amount: parsedAmount } = parseAmountInput(
+    amountStr || undefined,
+    sender.balance,
+  );
   if (parseErr || parsedAmount === undefined) {
     ctx.reply(parseErr ?? "❌ 올바른 금액을 입력하세요.");
     return;

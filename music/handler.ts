@@ -276,7 +276,9 @@ export async function handleMusic(message: Message): Promise<boolean> {
         const video = results[0];
         if (!video.url) {
           console.error("[Music] 검색 결과 URL 없음:", video);
-          await loadingMsg.edit(`😢 **${arg}** 에 대한 재생 가능한 영상을 찾지 못했습니다.`).catch(() => {});
+          await loadingMsg
+            .edit(`😢 **${arg}** 에 대한 재생 가능한 영상을 찾지 못했습니다.`)
+            .catch(() => {});
           return true;
         }
         item = {

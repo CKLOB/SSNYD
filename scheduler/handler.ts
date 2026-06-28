@@ -133,12 +133,7 @@ function formatScheduleLabel(
 }
 
 function scheduleLabel(s: Schedule): string {
-  return formatScheduleLabel(
-    s.schedule_type ?? "daily",
-    s.weekdays,
-    s.day_of_month,
-    s.target_date,
-  );
+  return formatScheduleLabel(s.schedule_type ?? "daily", s.weekdays, s.day_of_month, s.target_date);
 }
 
 function shouldFire(s: Schedule, kst: Date): boolean {
@@ -228,7 +223,11 @@ export function initScheduler(client: Client): void {
   }, 30 * 1000);
 }
 
-async function saveAndConfirm(message: Message, state: PendingState, guildId: string): Promise<void> {
+async function saveAndConfirm(
+  message: Message,
+  state: PendingState,
+  guildId: string,
+): Promise<void> {
   const weekdaysJson = state.weekdays ? JSON.stringify(state.weekdays) : null;
   await addSchedule(
     guildId,
@@ -328,7 +327,7 @@ export async function handleScheduler(message: Message): Promise<boolean> {
       if (!scheduleType) {
         message.reply(
           "❌ 올바른 유형을 선택해주세요. (1~6 또는 매일/평일/주말/매주/매월/1회)\n" +
-          SCHEDULE_TYPE_MENU,
+            SCHEDULE_TYPE_MENU,
         );
         return true;
       }
@@ -341,8 +340,8 @@ export async function handleScheduler(message: Message): Promise<boolean> {
         state.step = "weekdays";
         message.reply(
           "📅 요일을 선택해주세요. (쉼표로 구분)\n" +
-          "`월 화 수 목 금 토 일` 또는 `1 2 3 4 5 6 0`\n" +
-          "예: `월,금` 또는 `1,5`",
+            "`월 화 수 목 금 토 일` 또는 `1 2 3 4 5 6 0`\n" +
+            "예: `월,금` 또는 `1,5`",
         );
       } else if (scheduleType === "monthly") {
         state.step = "day_of_month";
@@ -359,8 +358,8 @@ export async function handleScheduler(message: Message): Promise<boolean> {
       if (!days) {
         message.reply(
           "❌ 요일 형식이 올바르지 않습니다.\n" +
-          "`월 화 수 목 금 토 일` 또는 `1 2 3 4 5 6 0` 중에서 쉼표로 구분해서 입력하세요.\n" +
-          "예: `월,금` 또는 `1,5`",
+            "`월 화 수 목 금 토 일` 또는 `1 2 3 4 5 6 0` 중에서 쉼표로 구분해서 입력하세요.\n" +
+            "예: `월,금` 또는 `1,5`",
         );
         return true;
       }
@@ -397,7 +396,9 @@ export async function handleScheduler(message: Message): Promise<boolean> {
 
   if (content === "!보내기") {
     pendingSetup.set(key, { step: "channel" });
-    message.reply("📌 어떤 채널에 보낼까요? 채널을 멘션해주세요. 예: `#일반`\n(취소: `!보내기취소`)");
+    message.reply(
+      "📌 어떤 채널에 보낼까요? 채널을 멘션해주세요. 예: `#일반`\n(취소: `!보내기취소`)",
+    );
     return true;
   }
 
@@ -471,13 +472,19 @@ export async function handleSchedulerSlash(
 
       const match = time.match(/^(\d{1,2}):(\d{2})$/);
       if (!match) {
-        await interaction.reply({ content: "❌ 시간 형식이 올바르지 않습니다. 예: `08:30`", ephemeral: true });
+        await interaction.reply({
+          content: "❌ 시간 형식이 올바르지 않습니다. 예: `08:30`",
+          ephemeral: true,
+        });
         return;
       }
       const hour = parseInt(match[1]);
       const minute = parseInt(match[2]);
       if (hour > 23 || minute > 59) {
-        await interaction.reply({ content: "❌ 올바른 시간을 입력하세요. (00:00 ~ 23:59)", ephemeral: true });
+        await interaction.reply({
+          content: "❌ 올바른 시간을 입력하세요. (00:00 ~ 23:59)",
+          ephemeral: true,
+        });
         return;
       }
 

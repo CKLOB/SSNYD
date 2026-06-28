@@ -99,9 +99,7 @@ async function init(): Promise<void> {
     await pool.execute(`ALTER TABLE schedules ADD COLUMN target_date DATE NULL`);
   } catch (_) {}
   try {
-    await pool.execute(
-      `ALTER TABLE schedules ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1`,
-    );
+    await pool.execute(`ALTER TABLE schedules ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1`);
   } catch (_) {}
 }
 
@@ -164,7 +162,18 @@ async function addSchedule(
   const [result] = await pool.execute<ResultSetHeader>(
     `INSERT INTO schedules (guild_id, channel_id, channel_name, message, hour, minute, schedule_type, weekdays, day_of_month, target_date)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [guildId, channelId, channelName, message, hour, minute, scheduleType, weekdays, dayOfMonth, targetDate],
+    [
+      guildId,
+      channelId,
+      channelName,
+      message,
+      hour,
+      minute,
+      scheduleType,
+      weekdays,
+      dayOfMonth,
+      targetDate,
+    ],
   );
   return result.insertId;
 }
