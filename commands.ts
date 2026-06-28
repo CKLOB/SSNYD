@@ -196,10 +196,33 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
       opt.setName("메시지").setDescription("보낼 메시지 내용").setRequired(true),
     )
     .addStringOption((opt) =>
+      opt.setName("시간").setDescription("보낼 시간 (HH:MM 형식, 예: 08:30)").setRequired(true),
+    )
+    .addStringOption((opt) =>
       opt
-        .setName("시간")
-        .setDescription("매일 보낼 시간 (HH:MM 형식, 예: 08:30)")
-        .setRequired(true),
+        .setName("반복")
+        .setDescription("반복 유형")
+        .setRequired(true)
+        .addChoices(
+          { name: "매일", value: "daily" },
+          { name: "평일만 (월~금)", value: "weekdays" },
+          { name: "주말만 (토~일)", value: "weekends" },
+          { name: "매주 특정 요일", value: "weekly" },
+          { name: "매월 특정 날짜", value: "monthly" },
+          { name: "특정 날짜 1회", value: "once" },
+        ),
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName("요일")
+        .setDescription("반복:매주 선택 시 요일 (예: 월,금 또는 1,5)")
+        .setRequired(false),
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName("날짜")
+        .setDescription("반복:매월 → 날짜(1~31) | 반복:1회 → 날짜(YYYY-MM-DD)")
+        .setRequired(false),
     )
     .toJSON(),
 

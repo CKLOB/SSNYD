@@ -11,6 +11,8 @@ export interface User extends RowDataPacket {
   last_support: string | null;
 }
 
+export type ScheduleType = "daily" | "weekdays" | "weekends" | "weekly" | "monthly" | "once";
+
 export interface Schedule extends RowDataPacket {
   id: number;
   guild_id: string;
@@ -19,6 +21,11 @@ export interface Schedule extends RowDataPacket {
   message: string;
   hour: number;
   minute: number;
+  schedule_type: ScheduleType;
+  weekdays: string | null;
+  day_of_month: number | null;
+  target_date: string | null;
+  is_active: number;
 }
 
 const pool = mysql.createPool({
@@ -64,13 +71,35 @@ async function init(): Promise<void> {
       channel_name VARCHAR(100) NOT NULL,
       message TEXT NOT NULL,
       hour TINYINT NOT NULL,
-      minute TINYINT NOT NULL
+      minute TINYINT NOT NULL,
+      schedule_type VARCHAR(20) NOT NULL DEFAULT 'daily',
+      weekdays VARCHAR(20) NULL,
+      day_of_month TINYINT NULL,
+      target_date DATE NULL,
+      is_active TINYINT(1) NOT NULL DEFAULT 1
     )
   `);
   try {
     await pool.execute(
       `ALTER TABLE schedules ADD COLUMN guild_id VARCHAR(30) NOT NULL DEFAULT '' AFTER id`,
     );
+  } catch (_) {}
+  try {
+    await pool.execute(
+      `ALTER TABLE schedules ADD COLUMN schedule_type VARCHAR(20) NOT NULL DEFAULT 'daily'`,
+    );
+  } catch (_) {}
+  try {
+    await pool.execute(`ALTER TABLE schedules ADD COLUMN weekdays VARCHAR(20) NULL`);
+  } catch (_) {}
+  try {
+    await pool.execute(`ALTER TABLE schedules ADD COLUMN day_of_month TINYINT NULL`);
+  } catch (_) {}
+  try {
+    await pool.execute(`ALTER TABLE schedules ADD COLUMN target_date DATE NULL`);
+  } catch (_) {}
+  try {
+    await pool.execute(`ALTER TABLE schedules ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1`);
   } catch (_) {}
 }
 
@@ -125,16 +154,38 @@ async function addSchedule(
   message: string,
   hour: number,
   minute: number,
+  scheduleType: ScheduleType = "daily",
+  weekdays: string | null = null,
+  dayOfMonth: number | null = null,
+  targetDate: string | null = null,
 ): Promise<number> {
   const [result] = await pool.execute<ResultSetHeader>(
-    `INSERT INTO schedules (guild_id, channel_id, channel_name, message, hour, minute) VALUES (?, ?, ?, ?, ?, ?)`,
-    [guildId, channelId, channelName, message, hour, minute],
+    `INSERT INTO schedules (guild_id, channel_id, channel_name, message, hour, minute, schedule_type, weekdays, day_of_month, target_date)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      guildId,
+      channelId,
+      channelName,
+      message,
+      hour,
+      minute,
+      scheduleType,
+      weekdays,
+      dayOfMonth,
+      targetDate,
+    ],
   );
   return result.insertId;
 }
 
+async function deactivateSchedule(id: number): Promise<void> {
+  await pool.execute(`UPDATE schedules SET is_active = 0 WHERE id = ?`, [id]);
+}
+
 async function getAllSchedules(): Promise<Schedule[]> {
-  const [rows] = await pool.execute<Schedule[]>(`SELECT * FROM schedules ORDER BY id`);
+  const [rows] = await pool.execute<Schedule[]>(
+    `SELECT * FROM schedules WHERE is_active = 1 ORDER BY id`,
+  );
   return rows;
 }
 
@@ -195,6 +246,7 @@ export {
   setField,
   getTopUsers,
   addSchedule,
+  deactivateSchedule,
   getAllSchedules,
   getSchedules,
   deleteSchedule,

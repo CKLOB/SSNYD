@@ -1,6 +1,7 @@
 import { EmbedBuilder } from "discord.js";
 import { getUser, updateBalance, setField, getTopUsers } from "../db.js";
 import { toMysqlDatetime, toKSTDateStr } from "../utils.js";
+import { parseAmountInput } from "./games/shared.js";
 import { Ctx } from "../ctx.js";
 
 function cooldownLeft(lastTime: string | null, ms: number): string | null {
@@ -119,24 +120,16 @@ export async function handleTransfer(
     return;
   }
 
-  if (!amountStr) {
-    ctx.reply("❌ 송금 금액을 입력하세요. 예) `!송금 @이름 10000`");
-    return;
-  }
-
   const sender = await getUser(guildId, ctx.authorId, ctx.username);
-  const lower = amountStr.toLowerCase();
-  const amount =
-    lower === "올인" || lower === "all"
-      ? sender.balance
-      : lower === "반" || lower === "half" || lower === "절반"
-        ? Math.floor(sender.balance / 2)
-        : parseInt(amountStr);
-
-  if (isNaN(amount)) {
-    ctx.reply("❌ 올바른 금액을 입력하세요.");
+  const { error: parseErr, amount: parsedAmount } = parseAmountInput(
+    amountStr || undefined,
+    sender.balance,
+  );
+  if (parseErr || parsedAmount === undefined) {
+    ctx.reply(parseErr ?? "❌ 올바른 금액을 입력하세요.");
     return;
   }
+  const amount = parsedAmount;
   if (amount < 1000) {
     ctx.reply("❌ 최소 송금 금액은 1,000원입니다.");
     return;
