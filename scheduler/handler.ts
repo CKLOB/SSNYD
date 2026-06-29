@@ -132,8 +132,21 @@ function formatScheduleLabel(
   }
 }
 
+function toDateStr(val: string | Date | null): string | null {
+  if (!val) return null;
+  if (val instanceof Date) {
+    return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, "0")}-${String(val.getDate()).padStart(2, "0")}`;
+  }
+  return val;
+}
+
 function scheduleLabel(s: Schedule): string {
-  return formatScheduleLabel(s.schedule_type ?? "daily", s.weekdays, s.day_of_month, s.target_date);
+  return formatScheduleLabel(
+    s.schedule_type ?? "daily",
+    s.weekdays,
+    s.day_of_month,
+    toDateStr(s.target_date),
+  );
 }
 
 function shouldFire(s: Schedule, kst: Date): boolean {
@@ -164,8 +177,10 @@ function shouldFire(s: Schedule, kst: Date): boolean {
     }
     case "monthly":
       return s.day_of_month !== null && dom === s.day_of_month;
-    case "once":
-      return !!s.target_date && s.target_date === dateStr;
+    case "once": {
+      const td = toDateStr(s.target_date);
+      return !!td && td === dateStr;
+    }
     default:
       return true;
   }
