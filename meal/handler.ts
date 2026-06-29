@@ -1,4 +1,4 @@
-import { EmbedBuilder, Message } from "discord.js";
+import { EmbedBuilder, Message, ChatInputCommandInteraction } from "discord.js";
 import https from "https";
 import {
   kstNow,
@@ -8,6 +8,7 @@ import {
   ATPT_CODE,
   SCHOOL_CODE,
 } from "../utils.js";
+import { Ctx, ctxFromMessage, ctxFromInteraction } from "../ctx.js";
 
 const MEAL_LABELS: Record<number, string> = { 1: "조식", 2: "중식", 3: "석식" };
 
@@ -81,6 +82,42 @@ function fetchMeal(dateStr: string, mealType: number): Promise<MealResult | null
   });
 }
 
+async function executeMeal(
+  ctx: Ctx,
+  mealType: number,
+  dateStr: string,
+  dayLabel: string,
+): Promise<void> {
+  try {
+    const result = await fetchWithRetry(() => fetchMeal(dateStr, mealType));
+    if (result) {
+      const month = parseInt(dateStr.slice(4, 6));
+      const day = parseInt(dateStr.slice(6, 8));
+      const embed = new EmbedBuilder()
+        .setColor(0x3b82f6)
+        .setTitle(`🍽️ ${month}월 ${day}일 ${MEAL_LABELS[mealType]}`)
+        .setDescription(result.menu)
+        .setFooter({ text: result.cal });
+      ctx.reply({ embeds: [embed] });
+    } else {
+      ctx.reply(`😢 ${dayLabel} ${MEAL_LABELS[mealType]} 급식 정보가 없습니다.`);
+    }
+  } catch (err) {
+    console.error(`[NEIS] 급식 최종 실패 —`, err);
+    const error = err as Error;
+    const embed = new EmbedBuilder()
+      .setColor(0xef4444)
+      .setTitle("❌ 급식 정보 오류")
+      .addFields(
+        { name: "오류 유형", value: error.name || "Error", inline: true },
+        { name: "재시도", value: "2회 재시도 후 실패", inline: true },
+        { name: "메시지", value: error.message || "알 수 없는 오류", inline: false },
+      )
+      .setTimestamp();
+    ctx.reply({ embeds: [embed] });
+  }
+}
+
 export async function handleMeal(message: Message): Promise<boolean> {
   const content = message.content.trim();
   const kst = kstNow();
@@ -117,33 +154,29 @@ export async function handleMeal(message: Message): Promise<boolean> {
     dateStr = tomorrowStr;
   } else return false;
 
-  try {
-    const result = await fetchWithRetry(() => fetchMeal(dateStr, mealType));
-    if (result) {
-      const month = parseInt(dateStr.slice(4, 6));
-      const day = parseInt(dateStr.slice(6, 8));
-      const embed = new EmbedBuilder()
-        .setColor(0x3b82f6)
-        .setTitle(`🍽️ ${month}월 ${day}일 ${MEAL_LABELS[mealType]}`)
-        .setDescription(result.menu)
-        .setFooter({ text: result.cal });
-      message.reply({ embeds: [embed] });
-    } else {
-      message.reply(`😢 ${dayLabel} ${MEAL_LABELS[mealType]} 급식 정보가 없습니다.`);
-    }
-  } catch (err) {
-    console.error(`[NEIS] 급식 최종 실패 —`, err);
-    const error = err as Error;
-    const embed = new EmbedBuilder()
-      .setColor(0xef4444)
-      .setTitle("❌ 급식 정보 오류")
-      .addFields(
-        { name: "오류 유형", value: error.name || "Error", inline: true },
-        { name: "재시도", value: "2회 재시도 후 실패", inline: true },
-        { name: "메시지", value: error.message || "알 수 없는 오류", inline: false },
-      )
-      .setTimestamp();
-    message.reply({ embeds: [embed] });
-  }
+  await executeMeal(ctxFromMessage(message), mealType, dateStr, dayLabel);
   return true;
+}
+
+export async function handleMealSlash(interaction: ChatInputCommandInteraction): Promise<void> {
+  const commandName = interaction.commandName;
+  const kst = kstNow();
+  const todayStr = toNeisDateStr(kst);
+  const tomorrowStr = toNeisDateStr(new Date(kst.getTime() + 24 * 60 * 60 * 1000));
+
+  let mealType: number, dayLabel: string, dateStr: string;
+
+  if (commandName === "밥") {
+    ({ type: mealType, dayLabel, dateStr } = getMealByTime());
+  } else {
+    // commandName === "급식"
+    const 끼니 = interaction.options.getString("끼니", true);
+    const 날짜 = interaction.options.getString("날짜") ?? "오늘";
+    const mealMap: Record<string, number> = { 아침: 1, 점심: 2, 저녁: 3 };
+    mealType = mealMap[끼니];
+    dayLabel = 날짜;
+    dateStr = 날짜 === "내일" ? tomorrowStr : todayStr;
+  }
+
+  await executeMeal(ctxFromInteraction(interaction), mealType, dateStr, dayLabel);
 }

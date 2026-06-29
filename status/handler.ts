@@ -1,7 +1,8 @@
-import { EmbedBuilder, Message, Client } from "discord.js";
+import { EmbedBuilder, Message, Client, ChatInputCommandInteraction } from "discord.js";
 import https from "https";
 import { kstNow, toNeisDateStr, NEIS_KEY, ATPT_CODE, SCHOOL_CODE } from "../utils.js";
 import { ping as dbPing } from "../db.js";
+import { Ctx, ctxFromMessage, ctxFromInteraction } from "../ctx.js";
 
 interface ApiStatus {
   ok: boolean;
@@ -39,9 +40,7 @@ function checkNeis(): Promise<ApiStatus> {
   });
 }
 
-export async function handleStatus(message: Message, client: Client): Promise<boolean> {
-  if (message.content.trim() !== "!상태") return false;
-
+async function executeStatus(ctx: Ctx, client: Client): Promise<void> {
   const uptimeSec = Math.floor((client.uptime ?? 0) / 1000);
   const h = Math.floor(uptimeSec / 3600);
   const m = Math.floor((uptimeSec % 3600) / 60);
@@ -83,6 +82,18 @@ export async function handleStatus(message: Message, client: Client): Promise<bo
     )
     .setTimestamp();
 
-  message.reply({ embeds: [embed] });
+  ctx.reply({ embeds: [embed] });
+}
+
+export async function handleStatus(message: Message, client: Client): Promise<boolean> {
+  if (message.content.trim() !== "!상태") return false;
+  await executeStatus(ctxFromMessage(message), client);
   return true;
+}
+
+export async function handleStatusSlash(
+  interaction: ChatInputCommandInteraction,
+  client: Client,
+): Promise<void> {
+  await executeStatus(ctxFromInteraction(interaction), client);
 }

@@ -1,5 +1,19 @@
-import { EmbedBuilder, Message } from "discord.js";
+import { AudioPlayerStatus } from "@discordjs/voice";
+import { EmbedBuilder, GuildMember, Message, ChatInputCommandInteraction } from "discord.js";
+import play from "play-dl";
 import { searchTracks, SpotifyTrack } from "./spotify.js";
+import {
+  addToQueue,
+  getPlayerStatus,
+  getQueue,
+  pause,
+  resume,
+  skip,
+  stop,
+  QueueItem,
+} from "./player.js";
+
+// ─── Spotify 추천 (기존 기능 유지) ─────────────────────────────────────────
 
 function buildTrackEmbed(track: SpotifyTrack, title: string, color: number): EmbedBuilder {
   const artists = track.artists.map((a) => a.name).join(", ");
@@ -99,12 +113,22 @@ const GENRE_ARTISTS: Record<string, string[]> = {
 };
 
 const GENRE_LIST = Object.keys(GENRE_ARTISTS);
+const RECOMMEND_CMDS = ["!노추", "!오노추"] as const;
 
-const RECOMMEND_CMDS = ["!노추", "!노래", "!오노추"] as const;
+// ─── 음성채널 검증 헬퍼 ─────────────────────────────────────────────────────
+
+function getVoiceChannel(message: Message) {
+  if (!message.guild) return null;
+  const member = message.member as GuildMember | null;
+  return member?.voice?.channel ?? null;
+}
+
+// ─── 메인 핸들러 ────────────────────────────────────────────────────────────
 
 export async function handleMusic(message: Message): Promise<boolean> {
   const content = message.content.trim();
 
+  // ── Spotify 추천 ──────────────────────────────────────────────────────────
   const recCmd = RECOMMEND_CMDS.find((cmd) => content === cmd || content.startsWith(cmd + " "));
   if (recCmd) {
     const input = content.slice(recCmd.length).trim();
@@ -119,10 +143,7 @@ export async function handleMusic(message: Message): Promise<boolean> {
         .setDescription(
           "장르를 입력하면 해당 장르의 노래를 추천해드립니다!\n\n**사용법:** `!노추 [장르]`",
         )
-        .addFields({
-          name: "🎼 사용 가능한 장르",
-          value: GENRE_LIST.join(" / "),
-        });
+        .addFields({ name: "🎼 사용 가능한 장르", value: GENRE_LIST.join(" / ") });
       message.reply({ embeds: [embed] });
       return true;
     }
@@ -136,7 +157,6 @@ export async function handleMusic(message: Message): Promise<boolean> {
         message.reply("😢 추천 곡을 찾지 못했습니다. 다시 시도해보세요.");
         return true;
       }
-
       const picked = tracks[Math.floor(Math.random() * tracks.length)];
       const label = input ? genreKey : `${genreKey} (랜덤)`;
       const embed = buildTrackEmbed(picked, `🎧 ${label} 추천 노래`, 0x1db954);
@@ -148,13 +168,13 @@ export async function handleMusic(message: Message): Promise<boolean> {
     return true;
   }
 
+  // ── !가수 검색 ────────────────────────────────────────────────────────────
   if (content.startsWith("!가수 ")) {
     const query = content.slice("!가수 ".length).trim();
     if (!query) {
       message.reply("❌ 검색어를 입력해주세요. 예: `!가수 아이유`");
       return true;
     }
-
     try {
       const data = await searchTracks(query, 10);
       const tracks = data.tracks?.items;
@@ -162,7 +182,6 @@ export async function handleMusic(message: Message): Promise<boolean> {
         message.reply(`😢 **${query}** 검색 결과가 없습니다.`);
         return true;
       }
-
       const unique = [...new Map(tracks.map((t) => [t.id, t])).values()];
       const picked = unique[Math.floor(Math.random() * unique.length)];
       const embed = buildTrackEmbed(picked, `🔍 "${query}" 검색 결과`, 0x5865f2);
@@ -174,5 +193,450 @@ export async function handleMusic(message: Message): Promise<boolean> {
     return true;
   }
 
+  // ── !play 재생 ───────────────────────────────────────────────────────────
+  if (content === "!play" || content.startsWith("!play ")) {
+    if (!message.guild) return true;
+
+    const voiceChannel = getVoiceChannel(message);
+    if (!voiceChannel) {
+      message.reply("❌ 음성 채널에 먼저 입장해주세요!");
+      return true;
+    }
+
+    const botMember = message.guild.members.me;
+    const perms = botMember ? voiceChannel.permissionsFor(botMember) : null;
+    if (!perms?.has("Connect") || !perms?.has("Speak")) {
+      message.reply("❌ 해당 음성 채널에 접근 권한이 없습니다.");
+      return true;
+    }
+
+    const arg = content.slice("!play".length).trim();
+
+    if (!arg) {
+      const embed = new EmbedBuilder()
+        .setColor(0xff0000)
+        .setTitle("🎵 음악 재생")
+        .setDescription("음성 채널에 입장한 후 아래 명령어를 사용하세요.")
+        .addFields(
+          {
+            name: "🔍 제목으로 검색",
+            value: "`!play [제목]`\n예: `!play 아이유 Celebrity`",
+          },
+          {
+            name: "🔗 URL로 재생",
+            value: "`!play url [유튜브 URL]`\n예: `!play url https://youtu.be/...`",
+          },
+          {
+            name: "⚙️ 기타 명령어",
+            value: "`!스킵` `!정지` `!일시정지` `!재개` `!큐`",
+          },
+        );
+      message.reply({ embeds: [embed] });
+      return true;
+    }
+
+    let item: QueueItem;
+
+    // URL 재생
+    if (arg.toLowerCase().startsWith("url ")) {
+      const url = arg.slice(4).trim();
+      if (play.yt_validate(url) !== "video") {
+        message.reply("❌ 올바른 유튜브 영상 URL을 입력해주세요.");
+        return true;
+      }
+
+      const loadingMsg = await message.reply("🔍 영상 정보를 불러오는 중...");
+      try {
+        const info = await play.video_info(url);
+        const d = info.video_details;
+        item = {
+          title: d.title ?? "알 수 없음",
+          url: d.url ?? url,
+          requestedBy: message.author.username,
+          duration: d.durationRaw ?? "?:??",
+          thumbnail: d.thumbnails?.[0]?.url,
+        };
+        await loadingMsg.delete().catch(() => {});
+      } catch (err) {
+        console.error("[Music] video_info 오류:", err);
+        await loadingMsg
+          .edit("❌ 영상 정보를 불러올 수 없습니다. URL을 확인해주세요.")
+          .catch(() => {});
+        return true;
+      }
+    } else {
+      // 제목 검색
+      const loadingMsg = await message.reply(`🔍 **${arg}** 검색 중...`);
+      try {
+        const results = await play.search(arg, { source: { youtube: "video" }, limit: 1 });
+        if (!results.length) {
+          await loadingMsg.edit(`😢 **${arg}** 검색 결과가 없습니다.`).catch(() => {});
+          return true;
+        }
+        const video = results[0];
+        if (!video.url) {
+          console.error("[Music] 검색 결과 URL 없음:", video);
+          await loadingMsg
+            .edit(`😢 **${arg}** 에 대한 재생 가능한 영상을 찾지 못했습니다.`)
+            .catch(() => {});
+          return true;
+        }
+        item = {
+          title: video.title ?? "알 수 없음",
+          url: video.url,
+          requestedBy: message.author.username,
+          duration: video.durationRaw ?? "?:??",
+          thumbnail: video.thumbnails?.[0]?.url,
+        };
+        await loadingMsg.delete().catch(() => {});
+      } catch (err) {
+        console.error("[Music] 검색 오류:", err);
+        await loadingMsg
+          .edit("❌ 검색 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
+          .catch(() => {});
+        return true;
+      }
+    }
+
+    try {
+      const result = await addToQueue(
+        message.guild.id,
+        voiceChannel,
+        message.channel as import("discord.js").GuildTextBasedChannel,
+        item,
+      );
+      if (result === "queued") {
+        const { queue } = getQueue(message.guild.id);
+        const embed = new EmbedBuilder()
+          .setColor(0x5865f2)
+          .setTitle("📋 대기열에 추가됨")
+          .setDescription(`**[${item.title}](${item.url})**`)
+          .addFields(
+            { name: "⏱️ 길이", value: item.duration, inline: true },
+            { name: "📍 대기 순서", value: `${queue.length}번째`, inline: true },
+          );
+        if (item.thumbnail) embed.setThumbnail(item.thumbnail);
+        message.reply({ embeds: [embed] });
+      }
+    } catch (err) {
+      console.error("[Music] addToQueue 오류:", err);
+      message.reply(`❌ 오류가 발생했습니다: ${(err as Error).message}`);
+    }
+    return true;
+  }
+
+  // ── !스킵 ─────────────────────────────────────────────────────────────────
+  if (content === "!스킵") {
+    if (!message.guild) return true;
+    const skipped = skip(message.guild.id);
+    if (!skipped) {
+      message.reply("📭 현재 재생 중인 곡이 없습니다.");
+    } else {
+      message.reply(`⏭️ **${skipped.title}** 건너뜁니다.`);
+    }
+    return true;
+  }
+
+  // ── !정지 ─────────────────────────────────────────────────────────────────
+  if (content === "!정지") {
+    if (!message.guild) return true;
+    const stopped = stop(message.guild.id);
+    if (!stopped) {
+      message.reply("📭 현재 재생 중인 곡이 없습니다.");
+    } else {
+      message.reply("⏹️ 재생을 정지하고 음성 채널에서 나갑니다.");
+    }
+    return true;
+  }
+
+  // ── !일시정지 ─────────────────────────────────────────────────────────────
+  if (content === "!일시정지") {
+    if (!message.guild) return true;
+    const paused = pause(message.guild.id);
+    if (!paused) {
+      message.reply("📭 일시정지할 수 있는 곡이 없습니다.");
+    } else {
+      message.reply("⏸️ 일시정지했습니다. `!재개` 로 이어서 재생할 수 있습니다.");
+    }
+    return true;
+  }
+
+  // ── !재개 ─────────────────────────────────────────────────────────────────
+  if (content === "!재개") {
+    if (!message.guild) return true;
+    const resumed = resume(message.guild.id);
+    if (!resumed) {
+      message.reply("📭 재개할 수 있는 곡이 없습니다.");
+    } else {
+      message.reply("▶️ 재생을 재개합니다.");
+    }
+    return true;
+  }
+
+  // ── !큐 / !대기열 ─────────────────────────────────────────────────────────
+  if (content === "!큐" || content === "!대기열") {
+    if (!message.guild) return true;
+
+    const { current, queue } = getQueue(message.guild.id);
+    const status = getPlayerStatus(message.guild.id);
+
+    if (!current && queue.length === 0) {
+      message.reply("📭 현재 재생 중인 곡이 없습니다.");
+      return true;
+    }
+
+    const embed = new EmbedBuilder().setColor(0xff0000).setTitle("🎵 재생 대기열");
+
+    if (current) {
+      const statusIcon = status === AudioPlayerStatus.Paused ? "⏸️" : "▶️";
+      embed.addFields({
+        name: `${statusIcon} 지금 재생 중`,
+        value: `[${current.title}](${current.url}) \`${current.duration}\` — ${current.requestedBy}`,
+      });
+    }
+
+    if (queue.length > 0) {
+      const lines = queue
+        .slice(0, 10)
+        .map(
+          (item, i) =>
+            `**${i + 1}.** [${item.title}](${item.url}) \`${item.duration}\` — ${item.requestedBy}`,
+        )
+        .join("\n");
+      embed.addFields({ name: `📋 대기열 (${queue.length}곡)`, value: lines });
+      if (queue.length > 10) {
+        embed.setFooter({ text: `외 ${queue.length - 10}곡 더...` });
+      }
+    }
+
+    message.reply({ embeds: [embed] });
+    return true;
+  }
+
   return false;
+}
+
+export async function handleMusicSlash(interaction: ChatInputCommandInteraction): Promise<void> {
+  const cmd = interaction.commandName;
+  const guildId = interaction.guildId;
+  const member = interaction.member instanceof GuildMember ? interaction.member : null;
+  const voiceChannel = member?.voice?.channel ?? null;
+
+  // ── /노추 ──────────────────────────────────────────────────────────────────
+  if (cmd === "노추") {
+    const genreInput = interaction.options.getString("장르") ?? null;
+    const GENRE_ARTISTS_LOCAL = GENRE_ARTISTS;
+    const GENRE_LIST_LOCAL = GENRE_LIST;
+    const genreKey =
+      genreInput ?? GENRE_LIST_LOCAL[Math.floor(Math.random() * GENRE_LIST_LOCAL.length)];
+
+    await interaction.deferReply();
+    try {
+      const artists = GENRE_ARTISTS_LOCAL[genreKey];
+      const artist = artists[Math.floor(Math.random() * artists.length)];
+      const data = await searchTracks(`artist:"${artist}"`, 10, 0);
+      const tracks = data.tracks?.items;
+      if (!tracks || tracks.length === 0) {
+        await interaction.editReply("😢 추천 곡을 찾지 못했습니다. 다시 시도해보세요.");
+        return;
+      }
+      const picked = tracks[Math.floor(Math.random() * tracks.length)];
+      const label = genreInput ? genreKey : `${genreKey} (랜덤)`;
+      const embed = buildTrackEmbed(picked, `🎧 ${label} 추천 노래`, 0x1db954);
+      await interaction.editReply({ embeds: [embed] });
+    } catch (err) {
+      console.error(err);
+      await interaction.editReply("❌ Spotify API 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+    }
+    return;
+  }
+
+  // ── /가수 ──────────────────────────────────────────────────────────────────
+  if (cmd === "가수") {
+    const query = interaction.options.getString("검색어", true);
+    await interaction.deferReply();
+    try {
+      const data = await searchTracks(query, 10);
+      const tracks = data.tracks?.items;
+      if (!tracks || tracks.length === 0) {
+        await interaction.editReply(`😢 **${query}** 검색 결과가 없습니다.`);
+        return;
+      }
+      const unique = [...new Map(tracks.map((t) => [t.id, t])).values()];
+      const picked = unique[Math.floor(Math.random() * unique.length)];
+      const embed = buildTrackEmbed(picked, `🔍 "${query}" 검색 결과`, 0x5865f2);
+      await interaction.editReply({ embeds: [embed] });
+    } catch (err) {
+      console.error(err);
+      await interaction.editReply("❌ Spotify API 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+    }
+    return;
+  }
+
+  // ── /play ──────────────────────────────────────────────────────────────────
+  if (cmd === "play") {
+    if (!guildId) return;
+    if (!voiceChannel) {
+      await interaction.reply("❌ 음성 채널에 먼저 입장해주세요!");
+      return;
+    }
+
+    const guild = interaction.guild!;
+    const botMember = guild.members.me;
+    const perms = botMember ? voiceChannel.permissionsFor(botMember) : null;
+    if (!perms?.has("Connect") || !perms?.has("Speak")) {
+      await interaction.reply("❌ 해당 음성 채널에 접근 권한이 없습니다.");
+      return;
+    }
+
+    const arg = interaction.options.getString("검색어", true).trim();
+    await interaction.deferReply();
+
+    let item: QueueItem;
+
+    const isUrl = play.yt_validate(arg) === "video";
+    if (isUrl) {
+      try {
+        const info = await play.video_info(arg);
+        const d = info.video_details;
+        item = {
+          title: d.title ?? "알 수 없음",
+          url: d.url ?? arg,
+          requestedBy: interaction.user.username,
+          duration: d.durationRaw ?? "?:??",
+          thumbnail: d.thumbnails?.[0]?.url,
+        };
+      } catch (err) {
+        console.error("[Music] video_info 오류:", err);
+        await interaction.editReply("❌ 영상 정보를 불러올 수 없습니다. URL을 확인해주세요.");
+        return;
+      }
+    } else {
+      try {
+        const results = await play.search(arg, { source: { youtube: "video" }, limit: 1 });
+        if (!results.length) {
+          await interaction.editReply(`😢 **${arg}** 검색 결과가 없습니다.`);
+          return;
+        }
+        const video = results[0];
+        if (!video.url) {
+          console.error("[Music] 검색 결과 URL 없음:", video);
+          await interaction.editReply(`😢 **${arg}** 에 대한 재생 가능한 영상을 찾지 못했습니다.`);
+          return;
+        }
+        item = {
+          title: video.title ?? "알 수 없음",
+          url: video.url,
+          requestedBy: interaction.user.username,
+          duration: video.durationRaw ?? "?:??",
+          thumbnail: video.thumbnails?.[0]?.url,
+        };
+      } catch (err) {
+        console.error("[Music] 검색 오류:", err);
+        await interaction.editReply("❌ 검색 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+        return;
+      }
+    }
+
+    try {
+      const result = await addToQueue(
+        guildId,
+        voiceChannel,
+        interaction.channel as import("discord.js").GuildTextBasedChannel,
+        item,
+      );
+      if (result === "queued") {
+        const { queue } = getQueue(guildId);
+        const embed = new EmbedBuilder()
+          .setColor(0x5865f2)
+          .setTitle("📋 대기열에 추가됨")
+          .setDescription(`**[${item.title}](${item.url})**`)
+          .addFields(
+            { name: "⏱️ 길이", value: item.duration, inline: true },
+            { name: "📍 대기 순서", value: `${queue.length}번째`, inline: true },
+          );
+        if (item.thumbnail) embed.setThumbnail(item.thumbnail);
+        await interaction.editReply({ embeds: [embed] });
+      } else {
+        await interaction.editReply({ content: `▶️ 재생을 시작합니다: **${item.title}**` });
+      }
+    } catch (err) {
+      console.error("[Music] addToQueue 오류:", err);
+      await interaction.editReply(`❌ 오류가 발생했습니다: ${(err as Error).message}`);
+    }
+    return;
+  }
+
+  // ── /스킵 /정지 /일시정지 /재개 /큐 ─────────────────────────────────────────
+  if (!guildId) {
+    await interaction.reply({
+      content: "❌ 이 명령어는 서버에서만 사용할 수 있습니다.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  switch (cmd) {
+    case "스킵": {
+      const skipped = skip(guildId);
+      await interaction.reply(
+        skipped ? `⏭️ **${skipped.title}** 건너뜁니다.` : "📭 현재 재생 중인 곡이 없습니다.",
+      );
+      break;
+    }
+    case "정지": {
+      const stopped = stop(guildId);
+      await interaction.reply(
+        stopped ? "⏹️ 재생을 정지하고 음성 채널에서 나갑니다." : "📭 현재 재생 중인 곡이 없습니다.",
+      );
+      break;
+    }
+    case "일시정지": {
+      const paused = pause(guildId);
+      await interaction.reply(
+        paused
+          ? "⏸️ 일시정지했습니다. `/재개` 로 이어서 재생할 수 있습니다."
+          : "📭 일시정지할 수 있는 곡이 없습니다.",
+      );
+      break;
+    }
+    case "재개": {
+      const resumed = resume(guildId);
+      await interaction.reply(
+        resumed ? "▶️ 재생을 재개합니다." : "📭 재개할 수 있는 곡이 없습니다.",
+      );
+      break;
+    }
+    case "큐": {
+      const { current, queue } = getQueue(guildId);
+      const status = getPlayerStatus(guildId);
+
+      if (!current && queue.length === 0) {
+        await interaction.reply("📭 현재 재생 중인 곡이 없습니다.");
+        return;
+      }
+
+      const embed = new EmbedBuilder().setColor(0xff0000).setTitle("🎵 재생 대기열");
+      if (current) {
+        const statusIcon = status === AudioPlayerStatus.Paused ? "⏸️" : "▶️";
+        embed.addFields({
+          name: `${statusIcon} 지금 재생 중`,
+          value: `[${current.title}](${current.url}) \`${current.duration}\` — ${current.requestedBy}`,
+        });
+      }
+      if (queue.length > 0) {
+        const lines = queue
+          .slice(0, 10)
+          .map(
+            (item, i) =>
+              `**${i + 1}.** [${item.title}](${item.url}) \`${item.duration}\` — ${item.requestedBy}`,
+          )
+          .join("\n");
+        embed.addFields({ name: `📋 대기열 (${queue.length}곡)`, value: lines });
+        if (queue.length > 10) embed.setFooter({ text: `외 ${queue.length - 10}곡 더...` });
+      }
+      await interaction.reply({ embeds: [embed] });
+      break;
+    }
+  }
 }

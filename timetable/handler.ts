@@ -1,4 +1,4 @@
-import { EmbedBuilder, Message } from "discord.js";
+import { EmbedBuilder, Message, ChatInputCommandInteraction, GuildMember } from "discord.js";
 import https from "https";
 import {
   kstNow,
@@ -8,6 +8,7 @@ import {
   ATPT_CODE,
   SCHOOL_CODE,
 } from "../utils.js";
+import { Ctx, ctxFromMessage, ctxFromInteraction } from "../ctx.js";
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
 const CLASS_COLORS = [0x3b82f6, 0x10b981, 0xf59e0b, 0x8b5cf6, 0xef4444, 0xec4899];
@@ -102,6 +103,52 @@ function fetchTimetable(
   });
 }
 
+async function executeTimetable(ctx: Ctx, grade: number, classNum: number): Promise<void> {
+  const target = getTargetDate();
+  const dateStr = toNeisDateStr(target);
+  const dayName = DAY_NAMES[target.getUTCDay()];
+  const month = target.getUTCMonth() + 1;
+  const day = target.getUTCDate();
+
+  try {
+    const rows = await fetchWithRetry(() => fetchTimetable(dateStr, grade, classNum));
+    if (!rows || rows.length === 0) {
+      ctx.reply(`😢 ${month}월 ${day}일(${dayName}) 시간표 정보가 없습니다.`);
+      return;
+    }
+
+    const seen = new Set<string>();
+    const deduped = rows.filter((r) => {
+      const key = `${r.period}:${r.subject}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const lines = deduped.map((r) => `**${r.period}교시**  -  ${r.subject}`);
+    const color = CLASS_COLORS[(classNum - 1) % CLASS_COLORS.length];
+
+    const embed = new EmbedBuilder()
+      .setColor(color)
+      .setTitle(`📚 ${grade} - ${classNum} 시간표`)
+      .setDescription(`📅 **${month}월 ${day}일 (${dayName}요일)**\n\n${lines.join("\n")}`);
+
+    ctx.reply({ embeds: [embed] });
+  } catch (err) {
+    console.error(`[NEIS] 시간표 최종 실패 —`, err);
+    const error = err as Error;
+    const embed = new EmbedBuilder()
+      .setColor(0xef4444)
+      .setTitle("❌ 시간표 정보 오류")
+      .addFields(
+        { name: "오류 유형", value: error.name || "Error", inline: true },
+        { name: "재시도", value: "2회 재시도 후 실패", inline: true },
+        { name: "메시지", value: error.message || "알 수 없는 오류", inline: false },
+      )
+      .setTimestamp();
+    ctx.reply({ embeds: [embed] });
+  }
+}
+
 export async function handleTimetable(message: Message): Promise<boolean> {
   const cmd = message.content.trim();
   const match = cmd.match(/^!(?:시간표|ㅅㄱㅍ)\s*(?:(\d)-(\d+))?$/);
@@ -124,49 +171,57 @@ export async function handleTimetable(message: Message): Promise<boolean> {
     }
     ({ grade, classNum } = info);
   }
-  const target = getTargetDate();
-  const dateStr = toNeisDateStr(target);
-  const dayName = DAY_NAMES[target.getUTCDay()];
-  const month = target.getUTCMonth() + 1;
-  const day = target.getUTCDate();
 
-  try {
-    const rows = await fetchWithRetry(() => fetchTimetable(dateStr, grade, classNum));
-    if (!rows || rows.length === 0) {
-      message.reply(`😢 ${month}월 ${day}일(${dayName}) 시간표 정보가 없습니다.`);
-      return true;
+  await executeTimetable(ctxFromMessage(message), grade, classNum);
+  return true;
+}
+
+export async function handleTimetableSlash(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
+  const input = interaction.options.getString("학년반");
+
+  let grade: number, classNum: number;
+
+  if (input) {
+    const match = input.match(/^(\d)-(\d+)$/);
+    if (!match) {
+      await interaction.reply("❌ 올바른 형식으로 입력해줘! (예: `2-3`)");
+      return;
     }
-
-    const seen = new Set<string>();
-    const deduped = rows.filter((r) => {
-      const key = `${r.period}:${r.subject}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    const lines = deduped.map((r) => `**${r.period}교시**  -  ${r.subject}`);
-    const color = CLASS_COLORS[(classNum - 1) % CLASS_COLORS.length];
-
-    const embed = new EmbedBuilder()
-      .setColor(color)
-      .setTitle(`📚 ${grade} - ${classNum} 시간표`)
-      .setDescription(`📅 **${month}월 ${day}일 (${dayName}요일)**\n\n${lines.join("\n")}`);
-
-    message.reply({ embeds: [embed] });
-  } catch (err) {
-    console.error(`[NEIS] 시간표 최종 실패 —`, err);
-    const error = err as Error;
-    const embed = new EmbedBuilder()
-      .setColor(0xef4444)
-      .setTitle("❌ 시간표 정보 오류")
-      .addFields(
-        { name: "오류 유형", value: error.name || "Error", inline: true },
-        { name: "재시도", value: "2회 재시도 후 실패", inline: true },
-        { name: "메시지", value: error.message || "알 수 없는 오류", inline: false },
-      )
-      .setTimestamp();
-    message.reply({ embeds: [embed] });
+    grade = parseInt(match[1]);
+    classNum = parseInt(match[2]);
+    if (grade < 1 || grade > 3 || classNum < 1) {
+      await interaction.reply("❌ 학년은 1~3, 반은 1 이상의 숫자로 입력해줘! (예: `2-3`)");
+      return;
+    }
+  } else {
+    const member = interaction.member instanceof GuildMember ? interaction.member : null;
+    if (!member) {
+      await interaction.reply(
+        "❌ 반 역할 정보를 가져올 수 없습니다. 직접 학년-반을 입력해주세요. (예: `2-3`)",
+      );
+      return;
+    }
+    let found: ClassInfo | null = null;
+    for (const role of member.roles.cache.values()) {
+      const simpleMatch = role.name.match(/^(\d+)반$/);
+      if (simpleMatch) {
+        found = { grade: 2, classNum: parseInt(simpleMatch[1]) };
+        break;
+      }
+      const fullMatch = role.name.match(/^(\d+)-(\d+)$/);
+      if (fullMatch) {
+        found = { grade: parseInt(fullMatch[1]), classNum: parseInt(fullMatch[2]) };
+        break;
+      }
+    }
+    if (!found) {
+      await interaction.reply("❌ 반 역할이 없습니다. (예: `1반`, `2-1`) 관리자에게 문의하세요.");
+      return;
+    }
+    ({ grade, classNum } = found);
   }
 
-  return true;
+  await executeTimetable(ctxFromInteraction(interaction), grade, classNum);
 }

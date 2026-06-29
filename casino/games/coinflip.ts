@@ -3,26 +3,26 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  Message,
   ButtonInteraction,
 } from "discord.js";
 import { getUser, updateBalance } from "../../db.js";
 import { sleep, parseBet, fmt, activeGamblers } from "./shared.js";
+import { Ctx } from "../../ctx.js";
 
 const CF_HEADS_GIF =
   "https://cdn.discordapp.com/attachments/1481328528833380454/1481872541520892014/202603131311_3.gif";
 const CF_TAILS_GIF =
   "https://cdn.discordapp.com/attachments/1481328528833380454/1481872528333996154/202603131311_2.gif";
 
-export async function handleCoinflip(message: Message, args: string[]): Promise<void> {
-  const user = await getUser(message.guild!.id, message.author.id, message.author.username);
+export async function handleCoinflip(ctx: Ctx, args: string[]): Promise<void> {
+  const user = await getUser(ctx.guildId!, ctx.authorId, ctx.username);
   const { error, amount } = parseBet(args[0], user.balance);
   if (error) {
-    message.reply(error);
+    ctx.reply(error);
     return;
   }
 
-  const uid = message.author.id;
+  const uid = ctx.authorId;
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`cf_heads_${uid}_${amount}`)
@@ -40,7 +40,7 @@ export async function handleCoinflip(message: Message, args: string[]): Promise<
     .setDescription(`베팅 금액: **${amount!.toLocaleString()}원**\n앞면 / 뒷면 중 선택하세요.`);
 
   activeGamblers.add(uid);
-  message.reply({ embeds: [embed], components: [row] });
+  ctx.reply({ embeds: [embed], components: [row] });
 }
 
 export async function handleCoinflipButton(interaction: ButtonInteraction): Promise<void> {

@@ -3,11 +3,11 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  Message,
   ButtonInteraction,
 } from "discord.js";
 import { getUser, updateBalance } from "../../db.js";
 import { parseBet, fmt, activeGamblers, createDeck, Card } from "./shared.js";
+import { Ctx } from "../../ctx.js";
 
 interface BjGame {
   deck: Card[];
@@ -15,9 +15,26 @@ interface BjGame {
   dealer: Card[];
   bet: number;
   guildId: string;
+  createdAt: number;
 }
 
 const bjGames = new Map<string, BjGame>();
+
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [userId, game] of bjGames) {
+      if (now - game.createdAt > 15 * 60 * 1000) {
+        bjGames.delete(userId);
+        activeGamblers.delete(userId);
+        updateBalance(game.guildId, userId, game.bet).catch((e: Error) => {
+          console.error(`[BJ TTL] 환불 실패 (user ${userId}):`, e.message);
+        });
+      }
+    }
+  },
+  5 * 60 * 1000,
+);
 
 function bjVal(card: Card): number {
   if (card.v === "A") return 11;
@@ -49,20 +66,20 @@ function buildBjRow(userId: string): ActionRowBuilder<ButtonBuilder> {
   );
 }
 
-export async function handleBlackjack(message: Message, args: string[]): Promise<void> {
-  if (bjGames.has(message.author.id)) {
-    message.reply("❌ 이미 진행 중인 블랙잭 게임이 있습니다.");
+export async function handleBlackjack(ctx: Ctx, args: string[]): Promise<void> {
+  if (bjGames.has(ctx.authorId)) {
+    ctx.reply("❌ 이미 진행 중인 블랙잭 게임이 있습니다.");
     return;
   }
 
-  const user = await getUser(message.guild!.id, message.author.id, message.author.username);
+  const user = await getUser(ctx.guildId!, ctx.authorId, ctx.username);
   const { error, amount } = parseBet(args[0], user.balance);
   if (error) {
-    message.reply(error);
+    ctx.reply(error);
     return;
   }
 
-  await updateBalance(message.guild!.id, message.author.id, -amount!);
+  await updateBalance(ctx.guildId!, ctx.authorId, -amount!);
 
   const deck = createDeck();
   const player = [deck.pop()!, deck.pop()!];
@@ -73,16 +90,16 @@ export async function handleBlackjack(message: Message, args: string[]): Promise
   if (pVal === 21) {
     let delta: number, resultText: string;
     if (dVal === 21) {
-      await updateBalance(message.guild!.id, message.author.id, amount!);
+      await updateBalance(ctx.guildId!, ctx.authorId, amount!);
       delta = 0;
       resultText = "🤝 무승부 (블랙잭 vs 블랙잭)";
     } else {
-      await updateBalance(message.guild!.id, message.author.id, amount! * 2);
+      await updateBalance(ctx.guildId!, ctx.authorId, amount! * 2);
       delta = amount!;
       resultText = "🎉 블랙잭! 승리!";
     }
-    const updated = await getUser(message.guild!.id, message.author.id, message.author.username);
-    message.reply({
+    const updated = await getUser(ctx.guildId!, ctx.authorId, ctx.username);
+    ctx.reply({
       embeds: [
         new EmbedBuilder()
           .setColor(delta >= 0 ? 0xf59e0b : 0x6b7280)
@@ -99,16 +116,17 @@ export async function handleBlackjack(message: Message, args: string[]): Promise
     return;
   }
 
-  bjGames.set(message.author.id, {
+  bjGames.set(ctx.authorId, {
     deck,
     player,
     dealer,
     bet: amount!,
-    guildId: message.guild!.id,
+    guildId: ctx.guildId!,
+    createdAt: Date.now(),
   });
-  activeGamblers.add(message.author.id);
+  activeGamblers.add(ctx.authorId);
 
-  message.reply({
+  ctx.reply({
     embeds: [
       new EmbedBuilder()
         .setColor(0x3b82f6)
@@ -119,7 +137,7 @@ export async function handleBlackjack(message: Message, args: string[]): Promise
         )
         .setFooter({ text: "버튼을 눌러 진행하세요." }),
     ],
-    components: [buildBjRow(message.author.id)],
+    components: [buildBjRow(ctx.authorId)],
   });
 }
 

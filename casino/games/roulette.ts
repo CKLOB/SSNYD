@@ -3,11 +3,11 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  Message,
   ButtonInteraction,
 } from "discord.js";
 import { getUser, updateBalance } from "../../db.js";
 import { sleep, parseBet, fmt, activeGamblers } from "./shared.js";
+import { Ctx } from "../../ctx.js";
 
 const RED_NUMS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 
@@ -51,15 +51,15 @@ const ROULETTE_GIFS = [
   "https://cdn.discordapp.com/attachments/1481972735684120607/1481987493384687726/0313_133.gif?ex=69b54fe8&is=69b3fe68&hm=efe6cd1d76afe749e1893352c6cf3a441cb5c0ce7d4764538876ec8cf254e4c9&",
 ];
 
-export async function handleRoulette(message: Message, args: string[]): Promise<void> {
-  const user = await getUser(message.guild!.id, message.author.id, message.author.username);
+export async function handleRoulette(ctx: Ctx, args: string[]): Promise<void> {
+  const user = await getUser(ctx.guildId!, ctx.authorId, ctx.username);
   const { error, amount } = parseBet(args[0], user.balance);
   if (error) {
-    message.reply(error);
+    ctx.reply(error);
     return;
   }
 
-  const uid = message.author.id;
+  const uid = ctx.authorId;
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`rl_odd_${uid}_${amount}`)
@@ -84,7 +84,7 @@ export async function handleRoulette(message: Message, args: string[]): Promise<
   );
 
   activeGamblers.add(uid);
-  message.reply({
+  ctx.reply({
     embeds: [
       new EmbedBuilder()
         .setColor(0x3b82f6)

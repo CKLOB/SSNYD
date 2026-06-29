@@ -19,7 +19,7 @@ function toNeisDateStr(kstDate: Date): string {
   return `${y}${m}${d}`;
 }
 
-const NEIS_KEY = process.env.NEIS_API_KEY || "c11ea26f8c614f50bd7b19d2f3228e6d";
+const NEIS_KEY = process.env.NEIS_API_KEY ?? "";
 const ATPT_CODE = "F10";
 const SCHOOL_CODE = "7380292";
 

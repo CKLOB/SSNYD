@@ -5,18 +5,27 @@ export interface BetResult {
   amount?: number;
 }
 
-export function parseBet(arg: string | undefined, balance: number): BetResult {
-  if (!arg) return { error: "❌ 베팅 금액을 입력하세요." };
-  const lower = arg.toLowerCase();
+export function parseAmountInput(
+  arg: string | undefined,
+  balance: number,
+): { error?: string; amount?: number } {
+  if (!arg) return { error: "❌ 금액을 입력하세요." };
+  const lower = arg.toLowerCase().trim();
   let amount: number;
   if (lower === "올인" || lower === "all") {
     amount = balance;
-  } else if (lower === "반" || lower === "half") {
+  } else if (lower === "반" || lower === "half" || lower === "절반") {
     amount = Math.floor(balance / 2);
   } else {
     amount = parseInt(arg);
-    if (isNaN(amount)) return { error: "❌ 올바른 베팅 금액을 입력하세요." };
+    if (isNaN(amount)) return { error: "❌ 올바른 금액을 입력하세요." };
   }
+  return { amount };
+}
+
+export function parseBet(arg: string | undefined, balance: number): BetResult {
+  const { error, amount } = parseAmountInput(arg, balance);
+  if (error || amount === undefined) return { error: error ?? "❌ 베팅 금액을 입력하세요." };
   if (amount < 1000) return { error: "❌ 최소 베팅 금액은 1,000원입니다." };
   if (amount > balance) return { error: "❌ 잔액이 부족합니다" };
   return { amount };
