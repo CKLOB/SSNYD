@@ -96,7 +96,9 @@ async function executeAcademic(ctx: Ctx, year: number, month: number): Promise<v
       .setColor(0x3b82f6)
       .setTitle(`📅 ${year}년 ${month}월 학사일정`)
       .setDescription(lines.join("\n"))
-      .setFooter({ text: isFallback ? "NEIS 학사일정 · ⚠️ 수동 등록된 임시 정보" : "NEIS 학사일정" })
+      .setFooter({
+        text: isFallback ? "NEIS 학사일정 · ⚠️ 수동 등록된 임시 정보" : "NEIS 학사일정",
+      })
       .setTimestamp();
 
     await ctx.reply({ embeds: [embed] });
