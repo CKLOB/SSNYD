@@ -25,6 +25,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        env:
+          YOUTUBE_DL_SKIP_DOWNLOAD: true
 
       - name: Type check
         run: npm run typecheck
