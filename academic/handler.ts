@@ -1,6 +1,13 @@
 import https from "https";
 import { EmbedBuilder, Message, ChatInputCommandInteraction } from "discord.js";
-import { kstNow, NEIS_KEY, ATPT_CODE, SCHOOL_CODE, fetchWithRetry } from "../utils.js";
+import {
+  kstNow,
+  NEIS_KEY,
+  ATPT_CODE,
+  SCHOOL_CODE,
+  fetchWithRetry,
+  getFallbackSchedule,
+} from "../utils.js";
 import { Ctx, ctxFromMessage, ctxFromInteraction } from "../ctx.js";
 
 interface ScheduleRow {
@@ -50,7 +57,19 @@ function fetchAcademicSchedule(year: number, month: number): Promise<ScheduleRow
 
 async function executeAcademic(ctx: Ctx, year: number, month: number): Promise<void> {
   try {
-    const rows = await fetchWithRetry(() => fetchAcademicSchedule(year, month));
+    let rows = await fetchWithRetry(() => fetchAcademicSchedule(year, month));
+    let isFallback = false;
+    if (rows.length === 0) {
+      const fbRows = getFallbackSchedule(year, month);
+      if (fbRows.length > 0) {
+        const mm = String(month).padStart(2, "0");
+        rows = fbRows.map((r) => ({
+          AA_YMD: `${year}${mm}${String(r.day).padStart(2, "0")}`,
+          EVENT_NM: r.event,
+        }));
+        isFallback = true;
+      }
+    }
 
     if (rows.length === 0) {
       const embed = new EmbedBuilder()
@@ -77,7 +96,7 @@ async function executeAcademic(ctx: Ctx, year: number, month: number): Promise<v
       .setColor(0x3b82f6)
       .setTitle(`📅 ${year}년 ${month}월 학사일정`)
       .setDescription(lines.join("\n"))
-      .setFooter({ text: "NEIS 학사일정" })
+      .setFooter({ text: isFallback ? "NEIS 학사일정 · ⚠️ 수동 등록된 임시 정보" : "NEIS 학사일정" })
       .setTimestamp();
 
     await ctx.reply({ embeds: [embed] });
