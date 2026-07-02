@@ -90,8 +90,15 @@ async function executeMeal(
   dayLabel: string,
 ): Promise<void> {
   try {
-    let result = await fetchWithRetry(() => fetchMeal(dateStr, mealType));
+    let result: MealResult | null = null;
     let isFallback = false;
+    try {
+      result = await fetchWithRetry(() => fetchMeal(dateStr, mealType));
+    } catch (err) {
+      console.warn(
+        `[NEIS] 급식 API 호출 실패, fallback 데이터 사용을 시도합니다: ${(err as Error).message}`,
+      );
+    }
     if (!result) {
       const fb = getFallbackMeal(dateStr, mealType);
       if (fb) {

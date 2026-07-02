@@ -42,10 +42,19 @@ async function fetchWithRetry<T>(fn: () => Promise<T>, maxRetries = 2): Promise<
   throw lastErr;
 }
 
+const fallbackFileCache = new Map<string, unknown>();
+const fallbackMtimeCache = new Map<string, number>();
+
+// 매 요청마다 동기 readFileSync로 이벤트 루프를 막지 않도록, 파일이 안 바뀐 동안은 캐시를 재사용
 function readFallbackFile<T>(filename: string, empty: T): T {
+  const filePath = path.join(process.cwd(), "fallback", filename);
   try {
-    const filePath = path.join(process.cwd(), "fallback", filename);
-    return JSON.parse(fs.readFileSync(filePath, "utf8")) as T;
+    const mtime = fs.statSync(filePath).mtimeMs;
+    if (fallbackMtimeCache.get(filename) !== mtime) {
+      fallbackFileCache.set(filename, JSON.parse(fs.readFileSync(filePath, "utf8")));
+      fallbackMtimeCache.set(filename, mtime);
+    }
+    return fallbackFileCache.get(filename) as T;
   } catch {
     return empty;
   }

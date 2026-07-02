@@ -57,8 +57,15 @@ function fetchAcademicSchedule(year: number, month: number): Promise<ScheduleRow
 
 async function executeAcademic(ctx: Ctx, year: number, month: number): Promise<void> {
   try {
-    let rows = await fetchWithRetry(() => fetchAcademicSchedule(year, month));
+    let rows: ScheduleRow[] = [];
     let isFallback = false;
+    try {
+      rows = await fetchWithRetry(() => fetchAcademicSchedule(year, month));
+    } catch (err) {
+      console.warn(
+        `[NEIS] 학사일정 API 호출 실패, fallback 데이터 사용을 시도합니다: ${(err as Error).message}`,
+      );
+    }
     if (rows.length === 0) {
       const fbRows = getFallbackSchedule(year, month);
       if (fbRows.length > 0) {
