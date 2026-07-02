@@ -4,6 +4,7 @@ import {
   kstNow,
   toNeisDateStr,
   fetchWithRetry,
+  getFallbackMeal,
   NEIS_KEY,
   ATPT_CODE,
   SCHOOL_CODE,
@@ -89,7 +90,22 @@ async function executeMeal(
   dayLabel: string,
 ): Promise<void> {
   try {
-    const result = await fetchWithRetry(() => fetchMeal(dateStr, mealType));
+    let result: MealResult | null = null;
+    let isFallback = false;
+    try {
+      result = await fetchWithRetry(() => fetchMeal(dateStr, mealType));
+    } catch (err) {
+      console.warn(
+        `[NEIS] 급식 API 호출 실패, fallback 데이터 사용을 시도합니다: ${(err as Error).message}`,
+      );
+    }
+    if (!result) {
+      const fb = getFallbackMeal(dateStr, mealType);
+      if (fb) {
+        result = fb;
+        isFallback = true;
+      }
+    }
     if (result) {
       const month = parseInt(dateStr.slice(4, 6));
       const day = parseInt(dateStr.slice(6, 8));
@@ -97,7 +113,7 @@ async function executeMeal(
         .setColor(0x3b82f6)
         .setTitle(`🍽️ ${month}월 ${day}일 ${MEAL_LABELS[mealType]}`)
         .setDescription(result.menu)
-        .setFooter({ text: result.cal });
+        .setFooter({ text: isFallback ? `${result.cal} · ⚠️ 수동 등록된 임시 정보` : result.cal });
       ctx.reply({ embeds: [embed] });
     } else {
       ctx.reply(`😢 ${dayLabel} ${MEAL_LABELS[mealType]} 급식 정보가 없습니다.`);
