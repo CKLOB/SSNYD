@@ -11,13 +11,7 @@ import {
 } from "../db.js";
 
 type SetupStep =
-  | "channel"
-  | "message"
-  | "time"
-  | "schedule_type"
-  | "weekdays"
-  | "day_of_month"
-  | "target_date";
+  "channel" | "message" | "time" | "schedule_type" | "weekdays" | "day_of_month" | "target_date";
 
 interface PendingState {
   step: SetupStep;
