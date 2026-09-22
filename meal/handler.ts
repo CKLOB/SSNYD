@@ -1,4 +1,9 @@
-import { EmbedBuilder, Message, ChatInputCommandInteraction } from "discord.js";
+import {
+  EmbedBuilder,
+  Message,
+  ChatInputCommandInteraction,
+  PermissionFlagsBits,
+} from "discord.js";
 import https from "https";
 import {
   kstNow,
@@ -9,7 +14,27 @@ import {
   ATPT_CODE,
   SCHOOL_CODE,
 } from "../utils.js";
+import { getMealEnabled, setMealEnabled } from "../db.js";
 import { Ctx, ctxFromMessage, ctxFromInteraction } from "../ctx.js";
+
+const MEAL_CMDS = new Set([
+  "!밥",
+  "!ㅂ",
+  "!q",
+  "!급식",
+  "!ㄱㅅ",
+  "!ㄳ",
+  "!rt",
+  "!오늘아침",
+  "!아침",
+  "!오늘점심",
+  "!점심",
+  "!오늘저녁",
+  "!저녁",
+  "!내일아침",
+  "!내일점심",
+  "!내일저녁",
+]);
 
 const MEAL_LABELS: Record<number, string> = { 1: "조식", 2: "중식", 3: "석식" };
 
@@ -172,47 +197,87 @@ async function executeMeal(
   }
 }
 
+async function handleMealToggle(message: Message, args: string[]): Promise<void> {
+  if (!message.guild) {
+    await message.reply("❌ 이 명령어는 서버에서만 사용할 수 있습니다.");
+    return;
+  }
+  if (!message.member!.permissions.has(PermissionFlagsBits.Administrator)) {
+    await message.reply("❌ 서버 관리자 권한이 필요합니다.");
+    return;
+  }
+  const enable = args[0]?.toLowerCase() === "on";
+  await setMealEnabled(message.guild.id, enable);
+  await message.reply(
+    enable ? "✅ 급식 기능이 **활성화**되었습니다." : "🔒 급식 기능이 **비활성화**되었습니다.",
+  );
+}
+
 export async function handleMeal(message: Message): Promise<boolean> {
   const content = message.content.trim();
+  const parts = content.split(/\s+/);
+  const cmd = parts[0];
+  const args = parts.slice(1);
+
+  if (cmd === "!밥" && ["on", "off"].includes(args[0]?.toLowerCase() ?? "")) {
+    await handleMealToggle(message, args);
+    return true;
+  }
+
+  if (!MEAL_CMDS.has(cmd)) return false;
+
+  if (message.guild && !(await getMealEnabled(message.guild.id))) {
+    await message.reply("🔒 현재 서버에서 급식 기능이 비활성화되어 있습니다.");
+    return true;
+  }
+
   const kst = kstNow();
   const todayStr = toNeisDateStr(kst);
   const tomorrowStr = toNeisDateStr(new Date(kst.getTime() + 24 * 60 * 60 * 1000));
 
   let mealType: number, dayLabel: string, dateStr: string;
 
-  if (["!밥", "!ㅂ", "!q", "!급식", "!ㄱㅅ", "!ㄳ", "!rt"].includes(content)) {
+  if (["!밥", "!ㅂ", "!q", "!급식", "!ㄱㅅ", "!ㄳ", "!rt"].includes(cmd)) {
     ({ type: mealType, dayLabel, dateStr } = getMealByTime());
-  } else if (["!오늘아침", "!아침"].includes(content)) {
+  } else if (["!오늘아침", "!아침"].includes(cmd)) {
     mealType = 1;
     dayLabel = "오늘";
     dateStr = todayStr;
-  } else if (["!오늘점심", "!점심"].includes(content)) {
+  } else if (["!오늘점심", "!점심"].includes(cmd)) {
     mealType = 2;
     dayLabel = "오늘";
     dateStr = todayStr;
-  } else if (["!오늘저녁", "!저녁"].includes(content)) {
+  } else if (["!오늘저녁", "!저녁"].includes(cmd)) {
     mealType = 3;
     dayLabel = "오늘";
     dateStr = todayStr;
-  } else if (content === "!내일아침") {
+  } else if (cmd === "!내일아침") {
     mealType = 1;
     dayLabel = "내일";
     dateStr = tomorrowStr;
-  } else if (content === "!내일점심") {
+  } else if (cmd === "!내일점심") {
     mealType = 2;
     dayLabel = "내일";
     dateStr = tomorrowStr;
-  } else if (content === "!내일저녁") {
+  } else {
     mealType = 3;
     dayLabel = "내일";
     dateStr = tomorrowStr;
-  } else return false;
+  }
 
   await executeMeal(ctxFromMessage(message), mealType, dateStr, dayLabel);
   return true;
 }
 
 export async function handleMealSlash(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (interaction.guildId && !(await getMealEnabled(interaction.guildId))) {
+    await interaction.reply({
+      content: "🔒 현재 서버에서 급식 기능이 비활성화되어 있습니다.",
+      ephemeral: true,
+    });
+    return;
+  }
+
   const commandName = interaction.commandName;
   const kst = kstNow();
   const todayStr = toNeisDateStr(kst);
