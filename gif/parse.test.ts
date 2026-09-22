@@ -87,8 +87,13 @@ function streamOf(totalBytes: number, chunk = 64 * 1024): Response {
   );
 }
 
-test("8MB 넘는 응답은 다 받지 않고 끊는다", async () => {
-  assert.equal(await readCapped(streamOf(9 * 1024 * 1024)), null);
+test("12MB 넘는 응답은 다 받지 않고 끊는다", async () => {
+  assert.equal(await readCapped(streamOf(12 * 1024 * 1024 + 1)), null);
+});
+
+test("정확히 12MB인 응답은 허용한다", async () => {
+  const data = await readCapped(streamOf(12 * 1024 * 1024));
+  assert.equal(data?.byteLength, 12 * 1024 * 1024);
 });
 
 test("한도 이내 응답은 그대로 반환", async () => {

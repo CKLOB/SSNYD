@@ -12,7 +12,7 @@ import {
 const CMD_ADD = "!gif등록";
 const CMD_LIST = "!gif목록";
 const CMD_DEL = "!gif삭제";
-const MAX_BYTES = 8 * 1024 * 1024;
+const MAX_BYTES = 12 * 1024 * 1024;
 const MAX_KEYWORD = 100;
 const EXT: Record<string, string> = {
   "image/gif": "gif",
@@ -178,11 +178,11 @@ async function download(
   const declared = Number(res.headers.get("content-length"));
   if (declared > MAX_BYTES) {
     await res.body?.cancel();
-    return { error: "❌ 파일이 너무 큽니다. (최대 8MB)" };
+    return { error: "❌ 파일이 너무 큽니다. (최대 12MB)" };
   }
 
   const data = await readCapped(res);
-  if (data === null) return { error: "❌ 파일이 너무 큽니다. (최대 8MB)" };
+  if (data === null) return { error: "❌ 파일이 너무 큽니다. (최대 12MB)" };
   if (data.byteLength === 0) return { error: "❌ 빈 파일입니다." };
 
   return { data, contentType };
