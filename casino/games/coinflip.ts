@@ -5,7 +5,7 @@ import {
   ButtonStyle,
   ButtonInteraction,
 } from "discord.js";
-import { getUser, updateBalance } from "../../db.js";
+import { getUser, updateBalanceAndGet } from "../../db.js";
 import { sleep, parseBet, fmt, activeGamblers } from "./shared.js";
 import { Ctx } from "../../ctx.js";
 
@@ -54,15 +54,15 @@ export async function handleCoinflipButton(interaction: ButtonInteraction): Prom
     return;
   }
 
+  await interaction.deferUpdate();
+
   const result = Math.random() < 0.5 ? "heads" : "tails";
   const win = choice === result;
   const delta = win ? amount : -amount;
 
-  await updateBalance(interaction.guildId!, userId, delta);
-  const updated = await getUser(interaction.guildId!, userId, interaction.user.username);
+  const balance = await updateBalanceAndGet(interaction.guildId!, userId, delta);
   const gifUrl = result === "heads" ? CF_HEADS_GIF : CF_TAILS_GIF;
 
-  await interaction.deferUpdate();
   await interaction.editReply({
     embeds: [
       new EmbedBuilder()
@@ -86,7 +86,7 @@ export async function handleCoinflipButton(interaction: ButtonInteraction): Prom
           { name: "판정", value: win ? "🎉 승리!" : "😔 패배", inline: true },
           { name: "베팅", value: `${amount.toLocaleString()}원`, inline: true },
           { name: "손익", value: fmt(delta), inline: true },
-          { name: "현재 잔액", value: `${updated.balance.toLocaleString()}원`, inline: true },
+          { name: "현재 잔액", value: `${balance.toLocaleString()}원`, inline: true },
         ),
     ],
   });

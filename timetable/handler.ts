@@ -13,6 +13,9 @@ import { Ctx, ctxFromMessage, ctxFromInteraction } from "../ctx.js";
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
 const CLASS_COLORS = [0x3b82f6, 0x10b981, 0xf59e0b, 0x8b5cf6, 0xef4444, 0xec4899];
 
+const CACHE_TTL = 30 * 60 * 1000;
+const timetableCache = new Map<string, { rows: TimetableRow[]; cachedAt: number }>();
+
 interface ClassInfo {
   grade: number;
   classNum: number;
@@ -98,7 +101,7 @@ function fetchTimetable(
         }
       });
     });
-    req.setTimeout(8000, () => req.destroy(new Error("NEIS API 요청 시간 초과")));
+    req.setTimeout(4000, () => req.destroy(new Error("NEIS API 요청 시간 초과")));
     req.on("error", reject);
   });
 }
@@ -111,7 +114,16 @@ async function executeTimetable(ctx: Ctx, grade: number, classNum: number): Prom
   const day = target.getUTCDate();
 
   try {
-    const rows = await fetchWithRetry(() => fetchTimetable(dateStr, grade, classNum));
+    const cacheKey = `${dateStr}:${grade}:${classNum}`;
+    const cached = timetableCache.get(cacheKey);
+
+    let rows: TimetableRow[] | null;
+    if (cached && Date.now() - cached.cachedAt < CACHE_TTL) {
+      rows = cached.rows;
+    } else {
+      rows = await fetchWithRetry(() => fetchTimetable(dateStr, grade, classNum));
+      if (rows) timetableCache.set(cacheKey, { rows, cachedAt: Date.now() });
+    }
     if (!rows || rows.length === 0) {
       ctx.reply(`😢 ${month}월 ${day}일(${dayName}) 시간표 정보가 없습니다.`);
       return;

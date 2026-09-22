@@ -13,6 +13,9 @@ import { Ctx, ctxFromMessage, ctxFromInteraction } from "../ctx.js";
 
 const MEAL_LABELS: Record<number, string> = { 1: "조식", 2: "중식", 3: "석식" };
 
+const CACHE_TTL = 30 * 60 * 1000;
+const mealCache = new Map<string, { data: MealResult; cachedAt: number }>();
+
 interface MealTime {
   type: number;
   dateStr: string;
@@ -78,9 +81,36 @@ function fetchMeal(dateStr: string, mealType: number): Promise<MealResult | null
         }
       });
     });
-    req.setTimeout(8000, () => req.destroy(new Error("NEIS API 요청 시간 초과")));
+    req.setTimeout(4000, () => req.destroy(new Error("NEIS API 요청 시간 초과")));
     req.on("error", reject);
   });
+}
+
+async function warmMealCacheForToday(): Promise<void> {
+  const dateStr = toNeisDateStr(kstNow());
+  for (const mealType of [1, 2, 3]) {
+    try {
+      const result = await fetchWithRetry(() => fetchMeal(dateStr, mealType));
+      if (result) mealCache.set(`${dateStr}_${mealType}`, { data: result, cachedAt: Date.now() });
+    } catch (err) {
+      console.warn(`[NEIS] 급식 캐시 예열 실패 (type=${mealType}): ${(err as Error).message}`);
+    }
+  }
+}
+
+export function initMealCacheWarmer(): void {
+  let lastFiredMinute = -1;
+  setInterval(() => {
+    const kst = kstNow();
+    const minuteKey = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+    if (minuteKey === lastFiredMinute) return;
+    if (kst.getUTCMinutes() % 30 === 0) {
+      lastFiredMinute = minuteKey;
+      warmMealCacheForToday().catch((err) =>
+        console.error("[NEIS] 급식 캐시 예열 실패:", (err as Error).message),
+      );
+    }
+  }, 30 * 1000);
 }
 
 async function executeMeal(
@@ -90,14 +120,22 @@ async function executeMeal(
   dayLabel: string,
 ): Promise<void> {
   try {
+    const cacheKey = `${dateStr}_${mealType}`;
+    const cached = mealCache.get(cacheKey);
+
     let result: MealResult | null = null;
     let isFallback = false;
-    try {
-      result = await fetchWithRetry(() => fetchMeal(dateStr, mealType));
-    } catch (err) {
-      console.warn(
-        `[NEIS] 급식 API 호출 실패, fallback 데이터 사용을 시도합니다: ${(err as Error).message}`,
-      );
+    if (cached && Date.now() - cached.cachedAt < CACHE_TTL) {
+      result = cached.data;
+    } else {
+      try {
+        result = await fetchWithRetry(() => fetchMeal(dateStr, mealType));
+        if (result) mealCache.set(cacheKey, { data: result, cachedAt: Date.now() });
+      } catch (err) {
+        console.warn(
+          `[NEIS] 급식 API 호출 실패, fallback 데이터 사용을 시도합니다: ${(err as Error).message}`,
+        );
+      }
     }
     if (!result) {
       const fb = getFallbackMeal(dateStr, mealType);

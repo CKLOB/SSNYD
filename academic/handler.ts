@@ -15,6 +15,10 @@ interface ScheduleRow {
   EVENT_NM: string;
 }
 
+// 학사일정은 월 단위 조회라 재요청이 많고, 등록된 일정은 당일 바뀌는 일이 거의 없어 TTL을 길게 둔다.
+const CACHE_TTL = 3 * 60 * 60 * 1000;
+const academicCache = new Map<string, { rows: ScheduleRow[]; cachedAt: number }>();
+
 function fetchAcademicSchedule(year: number, month: number): Promise<ScheduleRow[]> {
   const mm = String(month).padStart(2, "0");
   const lastDay = new Date(year, month, 0).getDate();
@@ -50,21 +54,29 @@ function fetchAcademicSchedule(year: number, month: number): Promise<ScheduleRow
         }
       });
     });
-    req.setTimeout(8000, () => req.destroy(new Error("NEIS API timeout")));
+    req.setTimeout(4000, () => req.destroy(new Error("NEIS API timeout")));
     req.on("error", reject);
   });
 }
 
 async function executeAcademic(ctx: Ctx, year: number, month: number): Promise<void> {
   try {
+    const cacheKey = `${year}-${month}`;
+    const cached = academicCache.get(cacheKey);
+
     let rows: ScheduleRow[] = [];
     let isFallback = false;
-    try {
-      rows = await fetchWithRetry(() => fetchAcademicSchedule(year, month));
-    } catch (err) {
-      console.warn(
-        `[NEIS] 학사일정 API 호출 실패, fallback 데이터 사용을 시도합니다: ${(err as Error).message}`,
-      );
+    if (cached && Date.now() - cached.cachedAt < CACHE_TTL) {
+      rows = cached.rows;
+    } else {
+      try {
+        rows = await fetchWithRetry(() => fetchAcademicSchedule(year, month));
+        academicCache.set(cacheKey, { rows, cachedAt: Date.now() });
+      } catch (err) {
+        console.warn(
+          `[NEIS] 학사일정 API 호출 실패, fallback 데이터 사용을 시도합니다: ${(err as Error).message}`,
+        );
+      }
     }
     if (rows.length === 0) {
       const fbRows = getFallbackSchedule(year, month);

@@ -36,7 +36,7 @@ async function fetchWithRetry<T>(fn: () => Promise<T>, maxRetries = 2): Promise<
       lastErr = err;
       if (attempt <= maxRetries) {
         console.warn(`[NEIS] 재시도 ${attempt}/${maxRetries} — ${(err as Error).message}`);
-        await new Promise((r) => setTimeout(r, 1000 * attempt));
+        await new Promise((r) => setTimeout(r, 300));
       }
     }
   }

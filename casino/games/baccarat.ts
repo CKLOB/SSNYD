@@ -5,7 +5,7 @@ import {
   ButtonStyle,
   ButtonInteraction,
 } from "discord.js";
-import { getUser, updateBalance } from "../../db.js";
+import { getUser, updateBalanceAndGet } from "../../db.js";
 import { sleep, parseBet, fmt, activeGamblers, createDeck, Card } from "./shared.js";
 import { Ctx } from "../../ctx.js";
 
@@ -109,10 +109,12 @@ export async function handleBaccaratButton(interaction: ButtonInteraction): Prom
     return;
   }
 
+  await interaction.deferUpdate();
+
   const user = await getUser(interaction.guildId!, userId, interaction.user.username);
   if (user.balance < amount) {
     activeGamblers.delete(userId);
-    interaction.update({
+    await interaction.editReply({
       embeds: [
         new EmbedBuilder()
           .setColor(0xef4444)
@@ -124,7 +126,7 @@ export async function handleBaccaratButton(interaction: ButtonInteraction): Prom
     return;
   }
 
-  await updateBalance(interaction.guildId!, userId, -amount);
+  let balance = await updateBalanceAndGet(interaction.guildId!, userId, -amount);
   const { player, banker, pVal, bVal, winner } = runBaccarat();
 
   const isTie = winner === "tie";
@@ -138,18 +140,17 @@ export async function handleBaccaratButton(interaction: ButtonInteraction): Prom
   let delta: number;
   if (isTie && side === "tie") {
     delta = amount * 8;
-    await updateBalance(interaction.guildId!, userId, amount + delta);
+    balance = await updateBalanceAndGet(interaction.guildId!, userId, amount + delta);
   } else if (isTie) {
     delta = 0;
-    await updateBalance(interaction.guildId!, userId, amount);
+    balance = await updateBalanceAndGet(interaction.guildId!, userId, amount);
   } else if (userWin) {
     delta = side === "banker" ? Math.floor(amount * 0.95) : amount;
-    await updateBalance(interaction.guildId!, userId, amount + delta);
+    balance = await updateBalanceAndGet(interaction.guildId!, userId, amount + delta);
   } else {
     delta = -amount;
   }
 
-  const updated = await getUser(interaction.guildId!, userId, interaction.user.username);
   const resultText = isTie
     ? side === "tie"
       ? "🎉 타이 적중!"
@@ -158,8 +159,6 @@ export async function handleBaccaratButton(interaction: ButtonInteraction): Prom
       ? "🎉 승리!"
       : "😔 패배";
   const resultColor = userWin || (isTie && side === "tie") ? 0x22c55e : isTie ? 0x6b7280 : 0xef4444;
-
-  await interaction.deferUpdate();
 
   await interaction.editReply({
     embeds: [
@@ -237,7 +236,7 @@ export async function handleBaccaratButton(interaction: ButtonInteraction): Prom
           { name: "내 베팅", value: sideLabel[side], inline: true },
           { name: "판정", value: resultText, inline: true },
           { name: "손익", value: fmt(delta), inline: true },
-          { name: "현재 잔액", value: `${updated.balance.toLocaleString()}원`, inline: true },
+          { name: "현재 잔액", value: `${balance.toLocaleString()}원`, inline: true },
         ),
     ],
   });

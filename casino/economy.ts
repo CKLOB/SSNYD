@@ -1,5 +1,5 @@
 import { EmbedBuilder } from "discord.js";
-import { getUser, updateBalance, setField, getTopUsers } from "../db.js";
+import { getUser, updateBalance, updateBalanceAndGet, setField, getTopUsers } from "../db.js";
 import { toMysqlDatetime, toKSTDateStr } from "../utils.js";
 import { parseAmountInput } from "./games/shared.js";
 import { Ctx } from "../ctx.js";
@@ -27,16 +27,17 @@ export async function handleAttendance(ctx: Ctx): Promise<void> {
     }
   }
 
-  await updateBalance(guildId, ctx.authorId, 150000);
-  await setField(guildId, ctx.authorId, "last_attendance", toMysqlDatetime(new Date()));
-  const updated = await getUser(guildId, ctx.authorId, ctx.username);
+  const [balance] = await Promise.all([
+    updateBalanceAndGet(guildId, ctx.authorId, 150000),
+    setField(guildId, ctx.authorId, "last_attendance", toMysqlDatetime(new Date())),
+  ]);
 
   const embed = new EmbedBuilder()
     .setColor(0x22c55e)
     .setTitle("📅 출석 완료!")
     .addFields(
       { name: "보상", value: "+150,000원", inline: true },
-      { name: "현재 잔액", value: `${updated.balance.toLocaleString()}원`, inline: true },
+      { name: "현재 잔액", value: `${balance.toLocaleString()}원`, inline: true },
     );
   ctx.reply({ embeds: [embed] });
 }
@@ -51,16 +52,17 @@ export async function handleWork(ctx: Ctx): Promise<void> {
   }
 
   const reward = Math.floor(Math.random() * 20001) + 10000;
-  await updateBalance(guildId, ctx.authorId, reward);
-  await setField(guildId, ctx.authorId, "last_work", toMysqlDatetime(new Date()));
-  const updated = await getUser(guildId, ctx.authorId, ctx.username);
+  const [balance] = await Promise.all([
+    updateBalanceAndGet(guildId, ctx.authorId, reward),
+    setField(guildId, ctx.authorId, "last_work", toMysqlDatetime(new Date())),
+  ]);
 
   const embed = new EmbedBuilder()
     .setColor(0x3b82f6)
     .setTitle("💼 노동 완료!")
     .addFields(
       { name: "보상", value: `+${reward.toLocaleString()}원`, inline: true },
-      { name: "현재 잔액", value: `${updated.balance.toLocaleString()}원`, inline: true },
+      { name: "현재 잔액", value: `${balance.toLocaleString()}원`, inline: true },
     );
   ctx.reply({ embeds: [embed] });
 }
@@ -88,16 +90,17 @@ export async function handleSupport(ctx: Ctx): Promise<void> {
     return;
   }
 
-  await updateBalance(guildId, ctx.authorId, 100000);
-  await setField(guildId, ctx.authorId, "last_support", toMysqlDatetime(new Date()));
-  const updated = await getUser(guildId, ctx.authorId, ctx.username);
+  const [balance] = await Promise.all([
+    updateBalanceAndGet(guildId, ctx.authorId, 100000),
+    setField(guildId, ctx.authorId, "last_support", toMysqlDatetime(new Date())),
+  ]);
 
   const embed = new EmbedBuilder()
     .setColor(0xf59e0b)
     .setTitle("🆘 지원금 지급")
     .addFields(
       { name: "지원금", value: "+100,000원", inline: true },
-      { name: "현재 잔액", value: `${updated.balance.toLocaleString()}원`, inline: true },
+      { name: "현재 잔액", value: `${balance.toLocaleString()}원`, inline: true },
     );
   ctx.reply({ embeds: [embed] });
 }
@@ -143,10 +146,11 @@ export async function handleTransfer(
   const tax = Math.floor(amount * (taxRate / 100));
   const received = amount - tax;
 
-  await updateBalance(guildId, ctx.authorId, -amount);
-  await getUser(guildId, targetId, targetUsername);
+  const [senderBalance] = await Promise.all([
+    updateBalanceAndGet(guildId, ctx.authorId, -amount),
+    getUser(guildId, targetId, targetUsername),
+  ]);
   await updateBalance(guildId, targetId, received);
-  const senderUpdated = await getUser(guildId, ctx.authorId, ctx.username);
 
   const embed = new EmbedBuilder()
     .setColor(0x8b5cf6)
@@ -157,7 +161,7 @@ export async function handleTransfer(
       { name: "증여세율", value: `${taxRate}%`, inline: true },
       { name: "세금", value: `-${tax.toLocaleString()}원`, inline: true },
       { name: "실수령액", value: `${received.toLocaleString()}원`, inline: true },
-      { name: "내 잔액", value: `${senderUpdated.balance.toLocaleString()}원`, inline: true },
+      { name: "내 잔액", value: `${senderBalance.toLocaleString()}원`, inline: true },
     );
   ctx.reply({ embeds: [embed] });
 }

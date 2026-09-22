@@ -25,8 +25,17 @@ const USAGE = `❌ 사용법: \`${CMD_ADD} 키워드 URL\` 또는 \`${CMD_ADD} �
 // ponytail: 단일 인스턴스 전제. 봇을 여러 대 띄우면 한쪽 등록이 다른 쪽 캐시에 안 퍼진다 — 그때 TTL 재조회나 pub/sub으로 올린다.
 const keywords = new Map<string, Set<string>>();
 
+// 키워드 매칭은 메시지마다 도는데 실제 GIF blob은 트리거될 때만 필요해서 별도 캐시.
+// TTL 없이 등록/삭제 시점에 직접 무효화한다 — 데이터가 그때만 바뀌기 때문.
+const gifBlobCache = new Map<string, { data: Buffer; contentType: string }>();
+
+function gifCacheKey(guildId: string, keyword: string): string {
+  return `${guildId}:${keyword}`;
+}
+
 export async function initGifCache(): Promise<void> {
   keywords.clear();
+  gifBlobCache.clear();
   for (const row of await getAllGifKeywords()) {
     const set = keywords.get(row.guild_id) ?? new Set<string>();
     set.add(row.keyword);
@@ -209,6 +218,10 @@ async function registerGif(
   const set = keywords.get(guildId) ?? new Set<string>();
   set.add(parsed.keyword);
   keywords.set(guildId, set);
+  gifBlobCache.set(gifCacheKey(guildId, parsed.keyword), {
+    data: file.data,
+    contentType: file.contentType,
+  });
 
   const kb = Math.round(file.data.byteLength / 1024);
   return replaced
@@ -226,7 +239,10 @@ async function listGifs(guildId: string): Promise<string> {
 async function removeGif(guildId: string, keyword: string): Promise<string> {
   if (!keyword) return `❌ 사용법: \`${CMD_DEL} 키워드\``;
   const deleted = await deleteGifTrigger(guildId, keyword);
-  if (deleted) keywords.get(guildId)?.delete(keyword);
+  if (deleted) {
+    keywords.get(guildId)?.delete(keyword);
+    gifBlobCache.delete(gifCacheKey(guildId, keyword));
+  }
   return deleted
     ? `✅ \`${keyword}\` GIF를 삭제했습니다.`
     : `❌ \`${keyword}\` 키워드를 찾을 수 없습니다.`;
@@ -242,12 +258,18 @@ export function findKeywords(set: Set<string> | undefined, content: string): str
 }
 
 async function sendGif(message: Message, guildId: string, keyword: string): Promise<boolean> {
-  const row = await getGifTrigger(guildId, keyword);
+  const cacheKey = gifCacheKey(guildId, keyword);
+  let row = gifBlobCache.get(cacheKey);
   if (!row) {
-    keywords.get(guildId)?.delete(keyword);
-    return false;
+    const dbRow = await getGifTrigger(guildId, keyword);
+    if (!dbRow) {
+      keywords.get(guildId)?.delete(keyword);
+      return false;
+    }
+    row = { data: dbRow.data, contentType: dbRow.content_type };
+    gifBlobCache.set(cacheKey, row);
   }
-  const ext = EXT[row.content_type] ?? "gif";
+  const ext = EXT[row.contentType] ?? "gif";
   await message.reply({ files: [new AttachmentBuilder(row.data, { name: `gif.${ext}` })] });
   return true;
 }

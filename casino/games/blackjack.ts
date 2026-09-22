@@ -5,7 +5,7 @@ import {
   ButtonStyle,
   ButtonInteraction,
 } from "discord.js";
-import { getUser, updateBalance } from "../../db.js";
+import { getUser, updateBalance, updateBalanceAndGet } from "../../db.js";
 import { parseBet, fmt, activeGamblers, createDeck, Card } from "./shared.js";
 import { Ctx } from "../../ctx.js";
 
@@ -88,17 +88,16 @@ export async function handleBlackjack(ctx: Ctx, args: string[]): Promise<void> {
   const dVal = bjHandVal(dealer);
 
   if (pVal === 21) {
-    let delta: number, resultText: string;
+    let delta: number, resultText: string, balance: number;
     if (dVal === 21) {
-      await updateBalance(ctx.guildId!, ctx.authorId, amount!);
+      balance = await updateBalanceAndGet(ctx.guildId!, ctx.authorId, amount!);
       delta = 0;
       resultText = "🤝 무승부 (블랙잭 vs 블랙잭)";
     } else {
-      await updateBalance(ctx.guildId!, ctx.authorId, amount! * 2);
+      balance = await updateBalanceAndGet(ctx.guildId!, ctx.authorId, amount! * 2);
       delta = amount!;
       resultText = "🎉 블랙잭! 승리!";
     }
-    const updated = await getUser(ctx.guildId!, ctx.authorId, ctx.username);
     ctx.reply({
       embeds: [
         new EmbedBuilder()
@@ -109,7 +108,7 @@ export async function handleBlackjack(ctx: Ctx, args: string[]): Promise<void> {
             { name: "딜러 패", value: `${bjHandStr(dealer)} (${dVal})`, inline: false },
             { name: "결과", value: resultText, inline: true },
             { name: "손익", value: fmt(delta), inline: true },
-            { name: "현재 잔액", value: `${updated.balance.toLocaleString()}원`, inline: true },
+            { name: "현재 잔액", value: `${balance.toLocaleString()}원`, inline: true },
           ),
       ],
     });
@@ -151,9 +150,11 @@ export async function handleBjButton(interaction: ButtonInteraction): Promise<vo
     return;
   }
 
+  await interaction.deferUpdate();
+
   const game = bjGames.get(userId);
   if (!game) {
-    interaction.update({ components: [] });
+    await interaction.editReply({ components: [] });
     return;
   }
 
@@ -165,7 +166,7 @@ export async function handleBjButton(interaction: ButtonInteraction): Promise<vo
       bjGames.delete(userId);
       activeGamblers.delete(userId);
       const updated = await getUser(game.guildId, userId, interaction.user.username);
-      interaction.update({
+      await interaction.editReply({
         embeds: [
           new EmbedBuilder()
             .setColor(0xef4444)
@@ -187,7 +188,7 @@ export async function handleBjButton(interaction: ButtonInteraction): Promise<vo
       return;
     }
 
-    interaction.update({
+    await interaction.editReply({
       embeds: [
         new EmbedBuilder()
           .setColor(0x3b82f6)
@@ -211,22 +212,22 @@ export async function handleBjButton(interaction: ButtonInteraction): Promise<vo
     const pVal = bjHandVal(game.player);
     const dVal = bjHandVal(game.dealer);
 
-    let delta: number, resultText: string;
+    let delta: number, resultText: string, balance: number;
     if (dVal > 21 || pVal > dVal) {
       delta = game.bet;
       resultText = "🎉 승리!";
-      await updateBalance(game.guildId, userId, game.bet * 2);
+      balance = await updateBalanceAndGet(game.guildId, userId, game.bet * 2);
     } else if (pVal === dVal) {
       delta = 0;
       resultText = "🤝 무승부";
-      await updateBalance(game.guildId, userId, game.bet);
+      balance = await updateBalanceAndGet(game.guildId, userId, game.bet);
     } else {
       delta = -game.bet;
       resultText = "😔 패배";
+      balance = (await getUser(game.guildId, userId, interaction.user.username)).balance;
     }
 
-    const updated = await getUser(game.guildId, userId, interaction.user.username);
-    interaction.update({
+    await interaction.editReply({
       embeds: [
         new EmbedBuilder()
           .setColor(delta > 0 ? 0x22c55e : delta === 0 ? 0x6b7280 : 0xef4444)
@@ -236,7 +237,7 @@ export async function handleBjButton(interaction: ButtonInteraction): Promise<vo
             { name: "딜러 패", value: `${bjHandStr(game.dealer)} (${dVal})`, inline: false },
             { name: "결과", value: resultText, inline: true },
             { name: "손익", value: fmt(delta), inline: true },
-            { name: "현재 잔액", value: `${updated.balance.toLocaleString()}원`, inline: true },
+            { name: "현재 잔액", value: `${balance.toLocaleString()}원`, inline: true },
           ),
       ],
       components: [],

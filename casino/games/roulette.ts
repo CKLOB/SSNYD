@@ -5,7 +5,7 @@ import {
   ButtonStyle,
   ButtonInteraction,
 } from "discord.js";
-import { getUser, updateBalance } from "../../db.js";
+import { getUser, updateBalanceAndGet } from "../../db.js";
 import { sleep, parseBet, fmt, activeGamblers } from "./shared.js";
 import { Ctx } from "../../ctx.js";
 
@@ -108,10 +108,12 @@ export async function handleRouletteButton(interaction: ButtonInteraction): Prom
     return;
   }
 
+  await interaction.deferUpdate();
+
   const user = await getUser(interaction.guildId!, userId, interaction.user.username);
   if (user.balance < amount) {
     activeGamblers.delete(userId);
-    interaction.update({
+    await interaction.editReply({
       embeds: [
         new EmbedBuilder()
           .setColor(0xef4444)
@@ -123,7 +125,7 @@ export async function handleRouletteButton(interaction: ButtonInteraction): Prom
     return;
   }
 
-  await updateBalance(interaction.guildId!, userId, -amount);
+  let balance = await updateBalanceAndGet(interaction.guildId!, userId, -amount);
 
   const result = Math.floor(Math.random() * 37);
   const colorEmoji = result === 0 ? "🟢" : RED_NUMS.has(result) ? "🔴" : "⚫";
@@ -144,15 +146,14 @@ export async function handleRouletteButton(interaction: ButtonInteraction): Prom
   let delta: number;
   if (betType === "zero" && win) {
     delta = amount * 35;
-    await updateBalance(interaction.guildId!, userId, amount * 36);
+    balance = await updateBalanceAndGet(interaction.guildId!, userId, amount * 36);
   } else if (win) {
     delta = amount;
-    await updateBalance(interaction.guildId!, userId, amount * 2);
+    balance = await updateBalanceAndGet(interaction.guildId!, userId, amount * 2);
   } else {
     delta = -amount;
   }
 
-  const updated = await getUser(interaction.guildId!, userId, interaction.user.username);
   const betLabel: Record<string, string> = {
     odd: "홀",
     even: "짝",
@@ -161,7 +162,6 @@ export async function handleRouletteButton(interaction: ButtonInteraction): Prom
     zero: "🟢 0",
   };
 
-  await interaction.deferUpdate();
   await interaction.editReply({
     embeds: [
       new EmbedBuilder()
@@ -184,7 +184,7 @@ export async function handleRouletteButton(interaction: ButtonInteraction): Prom
           { name: "베팅", value: betLabel[betType] ?? betType, inline: true },
           { name: "판정", value: win ? "🎉 승리!" : "😔 패배", inline: true },
           { name: "손익", value: fmt(delta), inline: true },
-          { name: "현재 잔액", value: `${updated.balance.toLocaleString()}원`, inline: true },
+          { name: "현재 잔액", value: `${balance.toLocaleString()}원`, inline: true },
         ),
     ],
   });

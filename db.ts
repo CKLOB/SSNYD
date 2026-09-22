@@ -135,6 +135,25 @@ async function updateBalance(guildId: string, id: string, delta: number): Promis
   ]);
 }
 
+interface BalanceRow extends RowDataPacket {
+  balance: number;
+}
+
+// updateBalance + getUser을 따로 부르면 매번 왕복이 3번(UPDATE, INSERT IGNORE, SELECT *)이라,
+// 결과 잔액이 바로 필요한 호출부(카지노 버튼 등)를 위해 UPDATE 후 잔액만 가볍게 다시 읽는다.
+async function updateBalanceAndGet(guildId: string, id: string, delta: number): Promise<number> {
+  await pool.execute(`UPDATE users SET balance = balance + ? WHERE id = ? AND guild_id = ?`, [
+    delta,
+    id,
+    guildId,
+  ]);
+  const [rows] = await pool.execute<BalanceRow[]>(
+    `SELECT balance FROM users WHERE id = ? AND guild_id = ?`,
+    [id, guildId],
+  );
+  return rows[0].balance;
+}
+
 async function setField(
   guildId: string,
   id: string,
@@ -227,12 +246,20 @@ interface GuildSettingsRow extends RowDataPacket {
   gambling_enabled: number;
 }
 
+// 도박 명령마다 조회되는데 관리자가 토글할 때만 바뀌므로, 쓰기 시점에 직접 갱신하는 캐시로 충분하다.
+const gamblingEnabledCache = new Map<string, boolean>();
+
 async function getGamblingEnabled(guildId: string): Promise<boolean> {
+  const cached = gamblingEnabledCache.get(guildId);
+  if (cached !== undefined) return cached;
+
   const [rows] = await pool.execute<GuildSettingsRow[]>(
     `SELECT gambling_enabled FROM guild_settings WHERE guild_id = ?`,
     [guildId],
   );
-  return rows.length === 0 ? true : rows[0].gambling_enabled === 1;
+  const enabled = rows.length === 0 ? true : rows[0].gambling_enabled === 1;
+  gamblingEnabledCache.set(guildId, enabled);
+  return enabled;
 }
 
 async function setGamblingEnabled(guildId: string, enabled: boolean): Promise<void> {
@@ -241,6 +268,7 @@ async function setGamblingEnabled(guildId: string, enabled: boolean): Promise<vo
      ON DUPLICATE KEY UPDATE gambling_enabled = VALUES(gambling_enabled)`,
     [guildId, enabled ? 1 : 0],
   );
+  gamblingEnabledCache.set(guildId, enabled);
 }
 
 interface GifTriggerRow extends RowDataPacket {
@@ -310,6 +338,7 @@ export {
   ping,
   getUser,
   updateBalance,
+  updateBalanceAndGet,
   setField,
   getTopUsers,
   addSchedule,
