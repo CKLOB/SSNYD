@@ -14,7 +14,7 @@ import { handleScheduler, initScheduler, handleSchedulerSlash } from "./schedule
 import { handleTimetable, handleTimetableSlash } from "./timetable/handler.js";
 import { init as initDb } from "./db.js";
 import { handleRandom } from "./random/handler.js";
-import { handleGif, initGifCache } from "./gif/handler.js";
+import { handleGif, handleGifSlash, initGifCache } from "./gif/handler.js";
 import { handleMusic, handleMusicSlash } from "./music/handler.js";
 import { handleStatus, handleStatusSlash } from "./status/handler.js";
 import { handleAcademic, handleAcademicSlash } from "./academic/handler.js";
@@ -183,6 +183,9 @@ const GUILD_ONLY = new Set([
   "큐",
   "노추",
   "가수",
+  "gif등록",
+  "gif목록",
+  "gif삭제",
 ]);
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -247,6 +250,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
     case "알림삭제":
     case "알림삭제전체":
       await handleSchedulerSlash(i);
+      break;
+    case "gif등록":
+    case "gif목록":
+    case "gif삭제":
+      await handleGifSlash(i);
       break;
     case "명령어":
       await handleHelpSlash(i);

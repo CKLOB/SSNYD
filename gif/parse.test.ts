@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseAdd, isBlockedIp } from "./handler.js";
+import { parseAdd, isBlockedIp, readCapped } from "./handler.js";
 
 test("공백이 들어간 키워드 + URL", () => {
   assert.deepEqual(parseAdd(" @충동적 구매@ https://x.test/a.gif"), {
@@ -59,4 +59,39 @@ test("공인 IP는 통과", () => {
   for (const ip of ["1.1.1.1", "162.159.130.234", "172.32.0.1", "192.169.0.1", "2606:4700::1111"]) {
     assert.equal(isBlockedIp(ip), false, ip);
   }
+});
+
+test("IPv4-mapped IPv6 16진 표기도 차단", () => {
+  assert.equal(isBlockedIp("::ffff:7f00:1"), true); // 127.0.0.1
+  assert.equal(isBlockedIp("::ffff:a9fe:a9fe"), true); // 169.254.169.254
+  assert.equal(isBlockedIp("::ffff:0a00:0001"), true); // 10.0.0.1
+});
+
+test("NAT64/벤치마크 대역 차단", () => {
+  assert.equal(isBlockedIp("64:ff9b::7f00:1"), true);
+  assert.equal(isBlockedIp("198.18.0.1"), true);
+  assert.equal(isBlockedIp("192.0.0.1"), true);
+});
+
+function streamOf(totalBytes: number, chunk = 64 * 1024): Response {
+  let sent = 0;
+  return new Response(
+    new ReadableStream({
+      pull(controller) {
+        if (sent >= totalBytes) return controller.close();
+        const size = Math.min(chunk, totalBytes - sent);
+        sent += size;
+        controller.enqueue(new Uint8Array(size));
+      },
+    }),
+  );
+}
+
+test("8MB 넘는 응답은 다 받지 않고 끊는다", async () => {
+  assert.equal(await readCapped(streamOf(9 * 1024 * 1024)), null);
+});
+
+test("한도 이내 응답은 그대로 반환", async () => {
+  const data = await readCapped(streamOf(1024));
+  assert.equal(data?.byteLength, 1024);
 });

@@ -245,6 +245,39 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
     .toJSON(),
 
   new SlashCommandBuilder()
+    .setName("gif등록")
+    .setDescription("키워드에 GIF를 등록합니다")
+    .addStringOption((opt) =>
+      opt
+        .setName("키워드")
+        .setDescription("GIF를 부를 키워드 (예: @충동적 구매@)")
+        .setRequired(true),
+    )
+    .addAttachmentOption((opt) =>
+      opt.setName("파일").setDescription("등록할 GIF 파일").setRequired(false),
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName("주소")
+        .setDescription("GIF 이미지 직링크 (파일을 첨부하지 않을 때)")
+        .setRequired(false),
+    )
+    .toJSON(),
+
+  new SlashCommandBuilder()
+    .setName("gif목록")
+    .setDescription("등록된 GIF 키워드 목록을 확인합니다")
+    .toJSON(),
+
+  new SlashCommandBuilder()
+    .setName("gif삭제")
+    .setDescription("등록된 GIF 키워드를 삭제합니다")
+    .addStringOption((opt) =>
+      opt.setName("키워드").setDescription("삭제할 키워드").setRequired(true),
+    )
+    .toJSON(),
+
+  new SlashCommandBuilder()
     .setName("명령어")
     .setDescription("사용 가능한 명령어 목록을 확인합니다")
     .toJSON(),
