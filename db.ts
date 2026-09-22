@@ -60,9 +60,15 @@ async function init(): Promise<void> {
   await pool.execute(`
     CREATE TABLE IF NOT EXISTS guild_settings (
       guild_id VARCHAR(30) NOT NULL PRIMARY KEY,
-      gambling_enabled TINYINT(1) NOT NULL DEFAULT 1
+      gambling_enabled TINYINT(1) NOT NULL DEFAULT 1,
+      meal_enabled TINYINT(1) NOT NULL DEFAULT 1
     )
   `);
+  try {
+    await pool.execute(
+      `ALTER TABLE guild_settings ADD COLUMN meal_enabled TINYINT(1) NOT NULL DEFAULT 1`,
+    );
+  } catch (_) {}
   await pool.execute(`
     CREATE TABLE IF NOT EXISTS schedules (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -244,6 +250,7 @@ async function deleteAllSchedules(guildId: string): Promise<number> {
 
 interface GuildSettingsRow extends RowDataPacket {
   gambling_enabled: number;
+  meal_enabled: number;
 }
 
 // 도박 명령마다 조회되는데 관리자가 토글할 때만 바뀌므로, 쓰기 시점에 직접 갱신하는 캐시로 충분하다.
@@ -269,6 +276,31 @@ async function setGamblingEnabled(guildId: string, enabled: boolean): Promise<vo
     [guildId, enabled ? 1 : 0],
   );
   gamblingEnabledCache.set(guildId, enabled);
+}
+
+// 급식 명령마다 조회되는데 관리자가 토글할 때만 바뀌므로, 쓰기 시점에 직접 갱신하는 캐시로 충분하다.
+const mealEnabledCache = new Map<string, boolean>();
+
+async function getMealEnabled(guildId: string): Promise<boolean> {
+  const cached = mealEnabledCache.get(guildId);
+  if (cached !== undefined) return cached;
+
+  const [rows] = await pool.execute<GuildSettingsRow[]>(
+    `SELECT meal_enabled FROM guild_settings WHERE guild_id = ?`,
+    [guildId],
+  );
+  const enabled = rows.length === 0 ? true : rows[0].meal_enabled === 1;
+  mealEnabledCache.set(guildId, enabled);
+  return enabled;
+}
+
+async function setMealEnabled(guildId: string, enabled: boolean): Promise<void> {
+  await pool.execute(
+    `INSERT INTO guild_settings (guild_id, meal_enabled) VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE meal_enabled = VALUES(meal_enabled)`,
+    [guildId, enabled ? 1 : 0],
+  );
+  mealEnabledCache.set(guildId, enabled);
 }
 
 interface GifTriggerRow extends RowDataPacket {
@@ -349,6 +381,8 @@ export {
   deleteAllSchedules,
   getGamblingEnabled,
   setGamblingEnabled,
+  getMealEnabled,
+  setMealEnabled,
   addGifTrigger,
   getGifTrigger,
   getAllGifKeywords,
