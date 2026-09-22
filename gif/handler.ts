@@ -238,7 +238,7 @@ function say(message: Message, content: string): Promise<unknown> {
 
 // ponytail: 서버당 키워드 수가 적어서 그냥 훑는다. 수백 개가 되면 그때 Aho-Corasick 같은 걸 올린다.
 export function findKeywords(set: Set<string> | undefined, content: string): string[] {
-  return [...(set ?? [])].filter((keyword) => content.includes(keyword));
+  return [...(set ?? [])].filter((keyword) => content.includes(keyword)).slice(0, 4);
 }
 
 async function sendGif(message: Message, guildId: string, keyword: string): Promise<boolean> {

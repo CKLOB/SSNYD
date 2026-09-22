@@ -125,3 +125,8 @@ test("등록된 키워드가 없으면 빈 목록을 반환한다", () => {
 test("1글자 키워드는 등록 거부", () => {
   assert.ok("error" in parseAdd("ㅋ https://x.test/a.gif"));
 });
+
+test("한 메시지에서는 등록 순서대로 최대 4개 키워드만 반환한다", () => {
+  const set = new Set(["하나", "둘둘", "셋셋", "넷넷", "다섯"]);
+  assert.deepEqual(findKeywords(set, "다섯 넷넷 셋셋 둘둘 하나"), ["하나", "둘둘", "셋셋", "넷넷"]);
+});
