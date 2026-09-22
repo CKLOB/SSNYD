@@ -227,7 +227,6 @@ export async function handleMeal(message: Message): Promise<boolean> {
   if (!MEAL_CMDS.has(cmd)) return false;
 
   if (message.guild && !(await getMealEnabled(message.guild.id))) {
-    await message.reply("🔒 현재 서버에서 급식 기능이 비활성화되어 있습니다.");
     return true;
   }
 
