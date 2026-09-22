@@ -9,7 +9,7 @@ import {
   ChatInputCommandInteraction,
 } from "discord.js";
 import { handleCasino, handleButtonInteraction, handleCasinoSlash } from "./casino/handler.js";
-import { handleMeal, handleMealSlash } from "./meal/handler.js";
+import { handleMeal, handleMealSlash, initMealCacheWarmer } from "./meal/handler.js";
 import { handleScheduler, initScheduler, handleSchedulerSlash } from "./scheduler/handler.js";
 import { handleTimetable, handleTimetableSlash } from "./timetable/handler.js";
 import { init as initDb } from "./db.js";
@@ -19,6 +19,7 @@ import { handleMusic, handleMusicSlash } from "./music/handler.js";
 import { handleStatus, handleStatusSlash } from "./status/handler.js";
 import { handleAcademic, handleAcademicSlash } from "./academic/handler.js";
 import { handleWeather, handleWeatherSlash } from "./weather/handler.js";
+import { initWeatherCacheWarmer } from "./weather/cache.js";
 import { sendBotStatus } from "./webhook.js";
 import { registerCommands } from "./commands.js";
 
@@ -141,6 +142,8 @@ client.once(Events.ClientReady, async (readyClient) => {
     await initDb();
     await initGifCache();
     initScheduler(readyClient);
+    initMealCacheWarmer();
+    initWeatherCacheWarmer();
     await sendBotStatus("online");
     const clientId = readyClient.user.id;
     const guildId = process.env.GUILD_ID;

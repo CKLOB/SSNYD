@@ -6,7 +6,7 @@ const AIR_KEY = process.env.AIR_API_KEY;
 const NX = process.env.WEATHER_NX ?? "58"; // 광주광역시
 const NY = process.env.WEATHER_NY ?? "74";
 const AIR_STATION = process.env.AIR_STATION ?? "광산구";
-const CACHE_TTL = 10 * 60 * 1000;
+const CACHE_TTL = 30 * 60 * 1000;
 
 export interface WeatherData {
   temp: number;
@@ -38,7 +38,7 @@ function fetchJson(url: string): Promise<any> {
         }
       });
     });
-    req.setTimeout(8000, () => req.destroy(new Error("timeout")));
+    req.setTimeout(4000, () => req.destroy(new Error("timeout")));
     req.on("error", reject);
   });
 }
@@ -202,4 +202,19 @@ export async function getWeatherData(): Promise<WeatherData> {
   };
   cachedAt = Date.now();
   return cached;
+}
+
+export function initWeatherCacheWarmer(): void {
+  let lastFiredMinute = -1;
+  setInterval(() => {
+    const kst = kstNow();
+    const minuteKey = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+    if (minuteKey === lastFiredMinute) return;
+    if (kst.getUTCMinutes() % 30 === 0) {
+      lastFiredMinute = minuteKey;
+      getWeatherData().catch((err) =>
+        console.error("[Weather] 캐시 예열 실패:", (err as Error).message),
+      );
+    }
+  }, 30 * 1000);
 }
