@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseAdd, isBlockedIp, readCapped } from "./handler.js";
+import { parseAdd, isBlockedIp, readCapped, findKeyword } from "./handler.js";
 
 test("공백이 들어간 키워드 + URL", () => {
   assert.deepEqual(parseAdd(" @충동적 구매@ https://x.test/a.gif"), {
@@ -94,4 +94,21 @@ test("8MB 넘는 응답은 다 받지 않고 끊는다", async () => {
 test("한도 이내 응답은 그대로 반환", async () => {
   const data = await readCapped(streamOf(1024));
   assert.equal(data?.byteLength, 1024);
+});
+
+test("문장 중간에 있어도 잡는다", () => {
+  const set = new Set(["@충동적 구매@"]);
+  assert.equal(findKeyword(set, "이거 @충동적 구매@ ㅋㅋ"), "@충동적 구매@");
+  assert.equal(findKeyword(set, "@충동적 구매@"), "@충동적 구매@");
+  assert.equal(findKeyword(set, "그냥 잡담"), null);
+});
+
+test("여러 개 걸리면 더 긴 키워드가 이긴다", () => {
+  const set = new Set(["구매", "@충동적 구매@"]);
+  assert.equal(findKeyword(set, "이거 @충동적 구매@ 했다"), "@충동적 구매@");
+  assert.equal(findKeyword(set, "구매했음"), "구매");
+});
+
+test("1글자 키워드는 등록 거부", () => {
+  assert.ok("error" in parseAdd("ㅋ https://x.test/a.gif"));
 });
