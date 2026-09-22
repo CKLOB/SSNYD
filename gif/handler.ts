@@ -41,6 +41,8 @@ function validate(keyword: string, url: string | undefined): ParseResult {
   if (keyword.length > MAX_KEYWORD)
     return { error: `❌ 키워드는 ${MAX_KEYWORD}자 이하여야 합니다.` };
   if (/[\r\n]/.test(keyword)) return { error: "❌ 키워드에 줄바꿈은 쓸 수 없습니다." };
+  // 문장 중간도 잡기 때문에 1글자 키워드는 아무 메시지에나 걸린다
+  if (keyword.length < 2) return { error: "❌ 키워드는 2자 이상이어야 합니다." };
   if (keyword.startsWith("!"))
     return { error: "❌ `!`로 시작하는 키워드는 명령어와 겹쳐서 쓸 수 없습니다." };
   if (!url) return { error: USAGE };
@@ -234,6 +236,18 @@ function say(message: Message, content: string): Promise<unknown> {
   return message.reply({ content, allowedMentions: { parse: [] } });
 }
 
+// 메시지 어디에 있든 잡되, 여러 개가 걸리면 더 구체적인(긴) 키워드가 이긴다
+// ponytail: 서버당 키워드 수가 적어서 그냥 훑는다. 수백 개가 되면 그때 Aho-Corasick 같은 걸 올린다.
+export function findKeyword(set: Set<string> | undefined, content: string): string | null {
+  if (!set) return null;
+  let hit: string | null = null;
+  for (const keyword of set) {
+    if (!content.includes(keyword)) continue;
+    if (hit === null || keyword.length > hit.length) hit = keyword;
+  }
+  return hit;
+}
+
 async function sendGif(message: Message, guildId: string, keyword: string): Promise<boolean> {
   const row = await getGifTrigger(guildId, keyword);
   if (!row) {
@@ -268,8 +282,9 @@ export async function handleGif(message: Message): Promise<boolean> {
       return true;
     }
 
-    if (!keywords.get(guildId)?.has(content)) return false;
-    return await sendGif(message, guildId, content);
+    const hit = findKeyword(keywords.get(guildId), content);
+    if (!hit) return false;
+    return await sendGif(message, guildId, hit);
   } catch (err) {
     console.error("[Gif]", err);
     await say(message, "❌ GIF 처리 중 오류가 발생했습니다.").catch(() => {});
