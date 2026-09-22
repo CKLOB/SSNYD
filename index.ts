@@ -14,6 +14,7 @@ import { handleScheduler, initScheduler, handleSchedulerSlash } from "./schedule
 import { handleTimetable, handleTimetableSlash } from "./timetable/handler.js";
 import { init as initDb } from "./db.js";
 import { handleRandom } from "./random/handler.js";
+import { handleGif, initGifCache } from "./gif/handler.js";
 import { handleMusic, handleMusicSlash } from "./music/handler.js";
 import { handleStatus, handleStatusSlash } from "./status/handler.js";
 import { handleAcademic, handleAcademicSlash } from "./academic/handler.js";
@@ -97,6 +98,15 @@ function buildHelpEmbed(): EmbedBuilder {
         value: "`!상태` — 봇 업타임, 핑, 메모리, API 상태 확인",
       },
       {
+        name: "🖼️ GIF",
+        value: [
+          "`!gif등록 키워드 URL` — 키워드에 GIF 등록 (GIF 파일 첨부도 가능)",
+          "`!gif목록` — 등록된 키워드 확인",
+          "`!gif삭제 키워드` — 등록 해제",
+          "※ 등록한 키워드를 그대로 입력하면 봇이 GIF를 보냅니다",
+        ].join("\n"),
+      },
+      {
         name: "🔔 알림",
         value: [
           "`!보내기` — 정기 알림 설정",
@@ -129,6 +139,7 @@ client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Ready! Logged in as ${readyClient.user.tag}`);
   try {
     await initDb();
+    await initGifCache();
     initScheduler(readyClient);
     await sendBotStatus("online");
     const clientId = readyClient.user.id;
@@ -254,6 +265,7 @@ client.on(Events.MessageCreate, async (message) => {
   if (await handleTimetable(message)) return;
   if (await handleAcademic(message)) return;
   if (await handleWeather(message)) return;
+  if (await handleGif(message)) return;
   await handleMeal(message);
 });
 

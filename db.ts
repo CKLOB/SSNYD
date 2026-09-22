@@ -101,6 +101,17 @@ async function init(): Promise<void> {
   try {
     await pool.execute(`ALTER TABLE schedules ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1`);
   } catch (_) {}
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS gif_triggers (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      guild_id VARCHAR(30) NOT NULL,
+      keyword VARCHAR(100) NOT NULL,
+      data MEDIUMBLOB NOT NULL,
+      content_type VARCHAR(50) NOT NULL DEFAULT 'image/gif',
+      created_by VARCHAR(30) NOT NULL,
+      UNIQUE KEY uniq_guild_keyword (guild_id, keyword)
+    )
+  `);
 }
 
 async function getUser(guildId: string, id: string, username: string): Promise<User> {
@@ -232,6 +243,62 @@ async function setGamblingEnabled(guildId: string, enabled: boolean): Promise<vo
   );
 }
 
+interface GifTriggerRow extends RowDataPacket {
+  guild_id: string;
+  keyword: string;
+}
+
+interface GifDataRow extends RowDataPacket {
+  data: Buffer;
+  content_type: string;
+}
+
+// 반환값 true = 기존 키워드를 덮어썼음 (mysql은 UPDATE 시 affectedRows를 2로 준다)
+async function addGifTrigger(
+  guildId: string,
+  keyword: string,
+  data: Buffer,
+  contentType: string,
+  createdBy: string,
+): Promise<boolean> {
+  const [result] = await pool.execute<ResultSetHeader>(
+    `INSERT INTO gif_triggers (guild_id, keyword, data, content_type, created_by)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE data = VALUES(data), content_type = VALUES(content_type), created_by = VALUES(created_by)`,
+    [guildId, keyword, data, contentType, createdBy],
+  );
+  return result.affectedRows === 2;
+}
+
+async function getGifTrigger(guildId: string, keyword: string): Promise<GifDataRow | null> {
+  const [rows] = await pool.execute<GifDataRow[]>(
+    `SELECT data, content_type FROM gif_triggers WHERE guild_id = ? AND keyword = ?`,
+    [guildId, keyword],
+  );
+  return rows[0] ?? null;
+}
+
+async function getAllGifKeywords(): Promise<GifTriggerRow[]> {
+  const [rows] = await pool.execute<GifTriggerRow[]>(`SELECT guild_id, keyword FROM gif_triggers`);
+  return rows;
+}
+
+async function getGifKeywords(guildId: string): Promise<string[]> {
+  const [rows] = await pool.execute<GifTriggerRow[]>(
+    `SELECT keyword FROM gif_triggers WHERE guild_id = ? ORDER BY id`,
+    [guildId],
+  );
+  return rows.map((r) => r.keyword);
+}
+
+async function deleteGifTrigger(guildId: string, keyword: string): Promise<boolean> {
+  const [result] = await pool.execute<ResultSetHeader>(
+    `DELETE FROM gif_triggers WHERE guild_id = ? AND keyword = ?`,
+    [guildId, keyword],
+  );
+  return result.affectedRows > 0;
+}
+
 async function ping(): Promise<number> {
   const start = Date.now();
   await pool.execute("SELECT 1");
@@ -253,4 +320,9 @@ export {
   deleteAllSchedules,
   getGamblingEnabled,
   setGamblingEnabled,
+  addGifTrigger,
+  getGifTrigger,
+  getAllGifKeywords,
+  getGifKeywords,
+  deleteGifTrigger,
 };
