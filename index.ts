@@ -103,7 +103,7 @@ function buildHelpEmbed(): EmbedBuilder {
           "`!gif등록 키워드 URL` — 키워드에 GIF 등록 (GIF 파일 첨부도 가능)",
           "`!gif목록` — 등록된 키워드 확인",
           "`!gif삭제 키워드` — 등록 해제",
-          "※ 등록한 키워드를 그대로 입력하면 봇이 GIF를 보냅니다",
+          "※ 메시지에 등록한 키워드가 들어 있으면 봇이 GIF를 보냅니다",
         ].join("\n"),
       },
       {
