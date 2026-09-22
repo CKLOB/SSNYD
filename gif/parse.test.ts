@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseAdd, isBlockedIp, readCapped, findKeyword } from "./handler.js";
+import { parseAdd, isBlockedIp, readCapped, findKeywords } from "./handler.js";
 
 test("공백이 들어간 키워드 + URL", () => {
   assert.deepEqual(parseAdd(" @충동적 구매@ https://x.test/a.gif"), {
@@ -87,8 +87,13 @@ function streamOf(totalBytes: number, chunk = 64 * 1024): Response {
   );
 }
 
-test("8MB 넘는 응답은 다 받지 않고 끊는다", async () => {
-  assert.equal(await readCapped(streamOf(9 * 1024 * 1024)), null);
+test("12MB 넘는 응답은 다 받지 않고 끊는다", async () => {
+  assert.equal(await readCapped(streamOf(12 * 1024 * 1024 + 1)), null);
+});
+
+test("정확히 12MB인 응답은 허용한다", async () => {
+  const data = await readCapped(streamOf(12 * 1024 * 1024));
+  assert.equal(data?.byteLength, 12 * 1024 * 1024);
 });
 
 test("한도 이내 응답은 그대로 반환", async () => {
@@ -98,17 +103,30 @@ test("한도 이내 응답은 그대로 반환", async () => {
 
 test("문장 중간에 있어도 잡는다", () => {
   const set = new Set(["@충동적 구매@"]);
-  assert.equal(findKeyword(set, "이거 @충동적 구매@ ㅋㅋ"), "@충동적 구매@");
-  assert.equal(findKeyword(set, "@충동적 구매@"), "@충동적 구매@");
-  assert.equal(findKeyword(set, "그냥 잡담"), null);
+  assert.deepEqual(findKeywords(set, "이거 @충동적 구매@ ㅋㅋ"), ["@충동적 구매@"]);
+  assert.deepEqual(findKeywords(set, "@충동적 구매@"), ["@충동적 구매@"]);
+  assert.deepEqual(findKeywords(set, "그냥 잡담"), []);
 });
 
-test("여러 개 걸리면 더 긴 키워드가 이긴다", () => {
+test("겹치는 키워드도 모두 반환한다", () => {
   const set = new Set(["구매", "@충동적 구매@"]);
-  assert.equal(findKeyword(set, "이거 @충동적 구매@ 했다"), "@충동적 구매@");
-  assert.equal(findKeyword(set, "구매했음"), "구매");
+  assert.deepEqual(findKeywords(set, "이거 @충동적 구매@ 했다"), ["구매", "@충동적 구매@"]);
+  assert.deepEqual(findKeywords(set, "구매했음"), ["구매"]);
+});
+
+test("한 문장의 서로 다른 키워드는 각각 한 번씩 반환한다", () => {
+  assert.deepEqual(findKeywords(new Set(["안녕", "잘가"]), "안녕 잘가 안녕"), ["안녕", "잘가"]);
+});
+
+test("등록된 키워드가 없으면 빈 목록을 반환한다", () => {
+  assert.deepEqual(findKeywords(undefined, "안녕"), []);
 });
 
 test("1글자 키워드는 등록 거부", () => {
   assert.ok("error" in parseAdd("ㅋ https://x.test/a.gif"));
+});
+
+test("한 메시지에서는 등록 순서대로 최대 4개 키워드만 반환한다", () => {
+  const set = new Set(["하나", "둘둘", "셋셋", "넷넷", "다섯"]);
+  assert.deepEqual(findKeywords(set, "다섯 넷넷 셋셋 둘둘 하나"), ["하나", "둘둘", "셋셋", "넷넷"]);
 });
