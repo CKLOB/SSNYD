@@ -236,16 +236,9 @@ function say(message: Message, content: string): Promise<unknown> {
   return message.reply({ content, allowedMentions: { parse: [] } });
 }
 
-// 메시지 어디에 있든 잡되, 여러 개가 걸리면 더 구체적인(긴) 키워드가 이긴다
 // ponytail: 서버당 키워드 수가 적어서 그냥 훑는다. 수백 개가 되면 그때 Aho-Corasick 같은 걸 올린다.
-export function findKeyword(set: Set<string> | undefined, content: string): string | null {
-  if (!set) return null;
-  let hit: string | null = null;
-  for (const keyword of set) {
-    if (!content.includes(keyword)) continue;
-    if (hit === null || keyword.length > hit.length) hit = keyword;
-  }
-  return hit;
+export function findKeywords(set: Set<string> | undefined, content: string): string[] {
+  return [...(set ?? [])].filter((keyword) => content.includes(keyword));
 }
 
 async function sendGif(message: Message, guildId: string, keyword: string): Promise<boolean> {
@@ -282,9 +275,12 @@ export async function handleGif(message: Message): Promise<boolean> {
       return true;
     }
 
-    const hit = findKeyword(keywords.get(guildId), content);
-    if (!hit) return false;
-    return await sendGif(message, guildId, hit);
+    const hits = findKeywords(keywords.get(guildId), content);
+    let sent = false;
+    for (const keyword of hits) {
+      if (await sendGif(message, guildId, keyword)) sent = true;
+    }
+    return sent;
   } catch (err) {
     console.error("[Gif]", err);
     await say(message, "❌ GIF 처리 중 오류가 발생했습니다.").catch(() => {});
