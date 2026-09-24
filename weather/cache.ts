@@ -1,12 +1,11 @@
-import https from "https";
-import { kstNow } from "../utils.js";
+import { kstNow, fetchJson, onEveryKstMinute } from "../utils.js";
+import { TtlCache } from "../cache.js";
 
 const KMA_KEY = process.env.KMA_API_KEY;
 const AIR_KEY = process.env.AIR_API_KEY;
 const NX = process.env.WEATHER_NX ?? "58"; // 광주광역시
 const NY = process.env.WEATHER_NY ?? "74";
 const AIR_STATION = process.env.AIR_STATION ?? "광산구";
-const CACHE_TTL = 30 * 60 * 1000;
 
 export interface WeatherData {
   temp: number;
@@ -17,31 +16,10 @@ export interface WeatherData {
   dust: string;
 }
 
-let cached: WeatherData | null = null;
-let cachedAt = 0;
-
-function fetchJson(url: string): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, (res) => {
-      if (res.statusCode !== 200) {
-        res.resume();
-        return reject(new Error(`HTTP ${res.statusCode}`));
-      }
-      res.setEncoding("utf8");
-      let raw = "";
-      res.on("data", (c: string) => (raw += c));
-      res.on("end", () => {
-        try {
-          resolve(JSON.parse(raw));
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-    req.setTimeout(4000, () => req.destroy(new Error("timeout")));
-    req.on("error", reject);
-  });
-}
+// 30분마다 예열하므로 TTL을 조금 더 길게 둬서 예열 사이에 캐시가 비지 않게 한다
+const WEATHER_TTL_MS = 40 * 60 * 1000;
+const weatherCache = new TtlCache<WeatherData>(1);
+const WEATHER_KEY = "current";
 
 // 초단기실황: 매시각 :40 이후 발표
 function ultraSrtBase(kst: Date): { base_date: string; base_time: string } {
@@ -119,8 +97,18 @@ function toDustLevel(pm10: number): string {
   return "매우나쁨";
 }
 
-export async function getWeatherData(): Promise<WeatherData> {
-  if (cached && Date.now() - cachedAt < CACHE_TTL) return cached;
+export function peekWeatherData(): WeatherData | undefined {
+  return weatherCache.get(WEATHER_KEY);
+}
+
+// 동시에 여러 명이 !날씨를 쳐도 API 3종 호출은 한 번만 나간다
+export function getWeatherData(force = false): Promise<WeatherData> {
+  return force
+    ? weatherCache.load(WEATHER_KEY, fetchWeather, () => WEATHER_TTL_MS)
+    : weatherCache.getOrLoad(WEATHER_KEY, fetchWeather, () => WEATHER_TTL_MS);
+}
+
+async function fetchWeather(): Promise<WeatherData> {
   if (!KMA_KEY) throw new Error("KMA_API_KEY 환경변수 없음");
   if (!AIR_KEY) throw new Error("AIR_API_KEY 환경변수 없음");
 
@@ -192,7 +180,7 @@ export async function getWeatherData(): Promise<WeatherData> {
   const airItem = air.response.body.items?.[0];
   const pm10Raw = parseFloat(airItem?.pm10Value ?? airItem?.pm10Value24 ?? "50");
 
-  cached = {
+  return {
     temp,
     feels_like: calcFeelsLike(temp, wsd, reh),
     status: toStatus(sky, ptyNow || ptyFcst),
@@ -200,21 +188,13 @@ export async function getWeatherData(): Promise<WeatherData> {
     temp_min: tempMin,
     dust: toDustLevel(isNaN(pm10Raw) ? 50 : pm10Raw),
   };
-  cachedAt = Date.now();
-  return cached;
 }
 
 export function initWeatherCacheWarmer(): void {
-  let lastFiredMinute = -1;
-  setInterval(() => {
-    const kst = kstNow();
-    const minuteKey = kst.getUTCHours() * 60 + kst.getUTCMinutes();
-    if (minuteKey === lastFiredMinute) return;
-    if (kst.getUTCMinutes() % 30 === 0) {
-      lastFiredMinute = minuteKey;
-      getWeatherData().catch((err) =>
-        console.error("[Weather] 캐시 예열 실패:", (err as Error).message),
-      );
-    }
-  }, 30 * 1000);
+  onEveryKstMinute(async (kst) => {
+    if (kst.getUTCMinutes() % 30 !== 0) return;
+    await getWeatherData(true).catch((err) =>
+      console.error("[Weather] 캐시 예열 실패:", (err as Error).message),
+    );
+  });
 }

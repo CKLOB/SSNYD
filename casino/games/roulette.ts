@@ -5,8 +5,16 @@ import {
   ButtonStyle,
   ButtonInteraction,
 } from "discord.js";
-import { getUser, updateBalanceAndGet } from "../../db.js";
-import { sleep, parseBet, fmt, activeGamblers } from "./shared.js";
+import { getUser, tryAdjustBalance } from "../../db.js";
+import {
+  sleep,
+  parseBet,
+  fmt,
+  startGame,
+  claimButton,
+  endGame,
+  insufficientEmbed,
+} from "./shared.js";
 import { Ctx } from "../../ctx.js";
 
 const RED_NUMS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
@@ -51,6 +59,17 @@ const ROULETTE_GIFS = [
   "https://cdn.discordapp.com/attachments/1481972735684120607/1481987493384687726/0313_133.gif?ex=69b54fe8&is=69b3fe68&hm=efe6cd1d76afe749e1893352c6cf3a441cb5c0ce7d4764538876ec8cf254e4c9&",
 ];
 
+const BETS: Record<
+  string,
+  { label: string; button: string; payout: number; wins: (n: number) => boolean }
+> = {
+  odd: { label: "홀", button: "홀", payout: 1, wins: (n) => n !== 0 && n % 2 === 1 },
+  even: { label: "짝", button: "짝", payout: 1, wins: (n) => n !== 0 && n % 2 === 0 },
+  black: { label: "⚫ 검", button: "검", payout: 1, wins: (n) => n !== 0 && !RED_NUMS.has(n) },
+  red: { label: "🔴 빨", button: "빨", payout: 1, wins: (n) => RED_NUMS.has(n) },
+  zero: { label: "🟢 0", button: "0", payout: 35, wins: (n) => n === 0 },
+};
+
 export async function handleRoulette(ctx: Ctx, args: string[]): Promise<void> {
   const user = await getUser(ctx.guildId!, ctx.authorId, ctx.username);
   const { error, amount } = parseBet(args[0], user.balance);
@@ -60,30 +79,16 @@ export async function handleRoulette(ctx: Ctx, args: string[]): Promise<void> {
   }
 
   const uid = ctx.authorId;
+  const gid = startGame(uid);
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`rl_odd_${uid}_${amount}`)
-      .setLabel("홀")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`rl_even_${uid}_${amount}`)
-      .setLabel("짝")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`rl_black_${uid}_${amount}`)
-      .setLabel("검")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`rl_red_${uid}_${amount}`)
-      .setLabel("빨")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(`rl_zero_${uid}_${amount}`)
-      .setLabel("0")
-      .setStyle(ButtonStyle.Success),
+    Object.entries(BETS).map(([type, bet]) =>
+      new ButtonBuilder()
+        .setCustomId(`rl_${type}_${uid}_${amount}_${gid}`)
+        .setLabel(bet.button)
+        .setStyle(type === "zero" ? ButtonStyle.Success : ButtonStyle.Secondary),
+    ),
   );
 
-  activeGamblers.add(uid);
   ctx.reply({
     embeds: [
       new EmbedBuilder()
@@ -98,95 +103,53 @@ export async function handleRoulette(ctx: Ctx, args: string[]): Promise<void> {
 }
 
 export async function handleRouletteButton(interaction: ButtonInteraction): Promise<void> {
-  const parts = interaction.customId.split("_");
-  const betType = parts[1];
-  const userId = parts[2];
-  const amount = parseInt(parts[3]);
+  const [, betType, userId, amountStr, gameId] = interaction.customId.split("_");
+  const amount = parseInt(amountStr);
+  const bet = BETS[betType];
+  if (!bet || !(await claimButton(interaction, userId, gameId))) return;
 
-  if (interaction.user.id !== userId) {
-    interaction.reply({ content: "❌ 이 게임은 당신의 게임이 아닙니다.", ephemeral: true });
-    return;
-  }
+  try {
+    await interaction.deferUpdate();
 
-  await interaction.deferUpdate();
+    const result = Math.floor(Math.random() * 37);
+    const colorEmoji = result === 0 ? "🟢" : RED_NUMS.has(result) ? "🔴" : "⚫";
+    const win = bet.wins(result);
+    const delta = win ? amount * bet.payout : -amount;
 
-  const user = await getUser(interaction.guildId!, userId, interaction.user.username);
-  if (user.balance < amount) {
-    activeGamblers.delete(userId);
+    // 결과를 먼저 뽑고 손익을 한 번에 반영한다 (예전: 잔액 조회 → 차감 → 당첨금 지급으로 DB 왕복 5번)
+    const balance = await tryAdjustBalance(interaction.guildId!, userId, delta, amount);
+    if (balance === null) {
+      await interaction.editReply({ embeds: [insufficientEmbed("🎡 룰렛")], components: [] });
+      return;
+    }
+
     await interaction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setColor(0xef4444)
-          .setTitle("🎡 룰렛")
-          .setDescription("❌ 잔액이 부족합니다."),
+          .setColor(0x3b82f6)
+          .setTitle("룰렛")
+          .setImage(ROULETTE_GIFS[result])
+          .setFooter({ text: "룰렛이 돌아가고 있습니다..." }),
       ],
       components: [],
     });
-    return;
+    await sleep(9000);
+
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(win ? 0x22c55e : 0xef4444)
+          .setTitle("🎡 룰렛")
+          .setDescription(`> ${colorEmoji} **${result}** ${colorEmoji}`)
+          .addFields(
+            { name: "베팅", value: bet.label, inline: true },
+            { name: "판정", value: win ? "🎉 승리!" : "😔 패배", inline: true },
+            { name: "손익", value: fmt(delta), inline: true },
+            { name: "현재 잔액", value: `${balance.toLocaleString()}원`, inline: true },
+          ),
+      ],
+    });
+  } finally {
+    endGame(userId);
   }
-
-  let balance = await updateBalanceAndGet(interaction.guildId!, userId, -amount);
-
-  const result = Math.floor(Math.random() * 37);
-  const colorEmoji = result === 0 ? "🟢" : RED_NUMS.has(result) ? "🔴" : "⚫";
-
-  const win =
-    betType === "zero"
-      ? result === 0
-      : betType === "odd"
-        ? result !== 0 && result % 2 === 1
-        : betType === "even"
-          ? result !== 0 && result % 2 === 0
-          : betType === "red"
-            ? RED_NUMS.has(result)
-            : betType === "black"
-              ? result !== 0 && !RED_NUMS.has(result)
-              : false;
-
-  let delta: number;
-  if (betType === "zero" && win) {
-    delta = amount * 35;
-    balance = await updateBalanceAndGet(interaction.guildId!, userId, amount * 36);
-  } else if (win) {
-    delta = amount;
-    balance = await updateBalanceAndGet(interaction.guildId!, userId, amount * 2);
-  } else {
-    delta = -amount;
-  }
-
-  const betLabel: Record<string, string> = {
-    odd: "홀",
-    even: "짝",
-    black: "⚫ 검",
-    red: "🔴 빨",
-    zero: "🟢 0",
-  };
-
-  await interaction.editReply({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(0x3b82f6)
-        .setTitle("룰렛")
-        .setImage(ROULETTE_GIFS[result])
-        .setFooter({ text: "룰렛이 돌아가고 있습니다..." }),
-    ],
-    components: [],
-  });
-  await sleep(9000);
-
-  await interaction.editReply({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(win ? 0x22c55e : 0xef4444)
-        .setTitle("🎡 룰렛")
-        .setDescription(`> ${colorEmoji} **${result}** ${colorEmoji}`)
-        .addFields(
-          { name: "베팅", value: betLabel[betType] ?? betType, inline: true },
-          { name: "판정", value: win ? "🎉 승리!" : "😔 패배", inline: true },
-          { name: "손익", value: fmt(delta), inline: true },
-          { name: "현재 잔액", value: `${balance.toLocaleString()}원`, inline: true },
-        ),
-    ],
-  });
-  activeGamblers.delete(userId);
 }

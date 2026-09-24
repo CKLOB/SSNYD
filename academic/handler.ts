@@ -1,14 +1,7 @@
-import https from "https";
 import { EmbedBuilder, Message, ChatInputCommandInteraction } from "discord.js";
-import {
-  kstNow,
-  NEIS_KEY,
-  ATPT_CODE,
-  SCHOOL_CODE,
-  fetchWithRetry,
-  getFallbackSchedule,
-} from "../utils.js";
+import { kstNow, fetchWithRetry, fetchNeis, getFallbackSchedule } from "../utils.js";
 import { Ctx, ctxFromMessage, ctxFromInteraction } from "../ctx.js";
+import { TtlCache } from "../cache.js";
 
 interface ScheduleRow {
   AA_YMD: string;
@@ -17,61 +10,36 @@ interface ScheduleRow {
 
 // 학사일정은 월 단위 조회라 재요청이 많고, 등록된 일정은 당일 바뀌는 일이 거의 없어 TTL을 길게 둔다.
 const CACHE_TTL = 3 * 60 * 60 * 1000;
-const academicCache = new Map<string, { rows: ScheduleRow[]; cachedAt: number }>();
+const academicCache = new TtlCache<ScheduleRow[]>(24);
 
-function fetchAcademicSchedule(year: number, month: number): Promise<ScheduleRow[]> {
+async function fetchAcademicSchedule(year: number, month: number): Promise<ScheduleRow[]> {
   const mm = String(month).padStart(2, "0");
   const lastDay = new Date(year, month, 0).getDate();
-  const fromDate = `${year}${mm}01`;
-  const toDate = `${year}${mm}${String(lastDay).padStart(2, "0")}`;
-
-  const url =
-    `https://open.neis.go.kr/hub/SchoolSchedule` +
-    `?KEY=${NEIS_KEY}&Type=json` +
-    `&ATPT_OFCDC_SC_CODE=${ATPT_CODE}` +
-    `&SD_SCHUL_CODE=${SCHOOL_CODE}` +
-    `&AA_FROM_YMD=${fromDate}&AA_TO_YMD=${toDate}`;
-
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, (res) => {
-      if (res.statusCode !== 200) {
-        res.resume();
-        return reject(new Error(`HTTP ${res.statusCode}`));
-      }
-      res.setEncoding("utf8");
-      let raw = "";
-      res.on("data", (chunk: string) => (raw += chunk));
-      res.on("end", () => {
-        try {
-          const json = JSON.parse(raw);
-          if (json.RESULT) {
-            if (json.RESULT.CODE === "INFO-200") return resolve([]);
-            return reject(new Error(`${json.RESULT.CODE}: ${json.RESULT.MESSAGE}`));
-          }
-          resolve(json.SchoolSchedule?.[1]?.row ?? []);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-    req.setTimeout(4000, () => req.destroy(new Error("NEIS API timeout")));
-    req.on("error", reject);
+  const json = await fetchNeis("SchoolSchedule", {
+    AA_FROM_YMD: `${year}${mm}01`,
+    AA_TO_YMD: `${year}${mm}${String(lastDay).padStart(2, "0")}`,
   });
+  if (json.RESULT) {
+    if (json.RESULT.CODE === "INFO-200") return [];
+    throw new Error(`${json.RESULT.CODE}: ${json.RESULT.MESSAGE}`);
+  }
+  return json.SchoolSchedule?.[1]?.row ?? [];
 }
 
 async function executeAcademic(ctx: Ctx, year: number, month: number): Promise<void> {
   try {
     const cacheKey = `${year}-${month}`;
     const cached = academicCache.get(cacheKey);
-
-    let rows: ScheduleRow[] = [];
+    let rows = cached ?? [];
     let isFallback = false;
-    if (cached && Date.now() - cached.cachedAt < CACHE_TTL) {
-      rows = cached.rows;
-    } else {
+    if (cached === undefined) {
+      await ctx.defer();
       try {
-        rows = await fetchWithRetry(() => fetchAcademicSchedule(year, month));
-        academicCache.set(cacheKey, { rows, cachedAt: Date.now() });
+        rows = await academicCache.getOrLoad(
+          cacheKey,
+          () => fetchWithRetry(() => fetchAcademicSchedule(year, month)),
+          () => CACHE_TTL,
+        );
       } catch (err) {
         console.warn(
           `[NEIS] 학사일정 API 호출 실패, fallback 데이터 사용을 시도합니다: ${(err as Error).message}`,

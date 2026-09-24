@@ -1,6 +1,6 @@
 import net from "node:net";
 import { lookup } from "node:dns/promises";
-import { Message, AttachmentBuilder, ChatInputCommandInteraction } from "discord.js";
+import { Message, AttachmentBuilder, ChatInputCommandInteraction, MessageFlags } from "discord.js";
 import {
   addGifTrigger,
   getGifTrigger,
@@ -27,7 +27,53 @@ const keywords = new Map<string, Set<string>>();
 
 // 키워드 매칭은 메시지마다 도는데 실제 GIF blob은 트리거될 때만 필요해서 별도 캐시.
 // TTL 없이 등록/삭제 시점에 직접 무효화한다 — 데이터가 그때만 바뀌기 때문.
-const gifBlobCache = new Map<string, { data: Buffer; contentType: string }>();
+// 파일 하나가 최대 12MB라 개수 제한 없이 두면 메모리가 계속 불어나므로, 총 용량 기준 LRU로 자른다.
+const BLOB_CACHE_MAX_BYTES = 64 * 1024 * 1024;
+
+interface GifBlob {
+  data: Buffer;
+  contentType: string;
+}
+
+class BlobCache {
+  private readonly map = new Map<string, GifBlob>();
+  private bytes = 0;
+
+  get(key: string): GifBlob | undefined {
+    const hit = this.map.get(key);
+    if (hit) {
+      // 최근 사용한 걸 맨 뒤로 보내서 가장 오래 안 쓴 것부터 버려지게 한다
+      this.map.delete(key);
+      this.map.set(key, hit);
+    }
+    return hit;
+  }
+
+  set(key: string, blob: GifBlob): void {
+    this.delete(key);
+    if (blob.data.byteLength > BLOB_CACHE_MAX_BYTES) return;
+    this.map.set(key, blob);
+    this.bytes += blob.data.byteLength;
+    for (const [oldKey] of this.map) {
+      if (this.bytes <= BLOB_CACHE_MAX_BYTES) break;
+      this.delete(oldKey);
+    }
+  }
+
+  delete(key: string): void {
+    const old = this.map.get(key);
+    if (!old) return;
+    this.bytes -= old.data.byteLength;
+    this.map.delete(key);
+  }
+
+  clear(): void {
+    this.map.clear();
+    this.bytes = 0;
+  }
+}
+
+const gifBlobCache = new BlobCache();
 
 function gifCacheKey(guildId: string, keyword: string): string {
   return `${guildId}:${keyword}`;
@@ -253,8 +299,17 @@ function say(message: Message, content: string): Promise<unknown> {
 }
 
 // ponytail: 서버당 키워드 수가 적어서 그냥 훑는다. 수백 개가 되면 그때 Aho-Corasick 같은 걸 올린다.
+// 모든 메시지마다 도는 경로라 배열을 새로 만들지 않고 최대 4개 찾으면 바로 멈춘다
 export function findKeywords(set: Set<string> | undefined, content: string): string[] {
-  return [...(set ?? [])].filter((keyword) => content.includes(keyword)).slice(0, 4);
+  const hits: string[] = [];
+  if (!set) return hits;
+  for (const keyword of set) {
+    if (content.includes(keyword)) {
+      hits.push(keyword);
+      if (hits.length === 4) break;
+    }
+  }
+  return hits;
 }
 
 async function sendGif(message: Message, guildId: string, keyword: string): Promise<boolean> {
@@ -297,12 +352,7 @@ export async function handleGif(message: Message): Promise<boolean> {
       return true;
     }
 
-    const hits = findKeywords(keywords.get(guildId), content);
-    let sent = false;
-    for (const keyword of hits) {
-      if (await sendGif(message, guildId, keyword)) sent = true;
-    }
-    return sent;
+    return await handleGifTrigger(message, guildId);
   } catch (err) {
     console.error("[Gif]", err);
     await say(message, "❌ GIF 처리 중 오류가 발생했습니다.").catch(() => {});
@@ -310,12 +360,21 @@ export async function handleGif(message: Message): Promise<boolean> {
   }
 }
 
+// 등록/목록/삭제 명령이 아니면 키워드 매칭만 한다 — 대부분의 일반 메시지가 타는 경로
+async function handleGifTrigger(message: Message, guildId: string): Promise<boolean> {
+  let sent = false;
+  for (const keyword of findKeywords(keywords.get(guildId), message.content)) {
+    if (await sendGif(message, guildId, keyword)) sent = true;
+  }
+  return sent;
+}
+
 export async function handleGifSlash(interaction: ChatInputCommandInteraction): Promise<void> {
   const guildId = interaction.guildId;
   if (!guildId) {
     await interaction.reply({
       content: "❌ 이 명령어는 서버에서만 사용할 수 있습니다.",
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }

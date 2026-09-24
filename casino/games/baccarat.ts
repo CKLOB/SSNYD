@@ -5,8 +5,18 @@ import {
   ButtonStyle,
   ButtonInteraction,
 } from "discord.js";
-import { getUser, updateBalanceAndGet } from "../../db.js";
-import { sleep, parseBet, fmt, activeGamblers, createDeck, Card } from "./shared.js";
+import { getUser, tryAdjustBalance } from "../../db.js";
+import {
+  sleep,
+  parseBet,
+  fmt,
+  startGame,
+  claimButton,
+  endGame,
+  insufficientEmbed,
+  createDeck,
+  Card,
+} from "./shared.js";
 import { Ctx } from "../../ctx.js";
 
 type BacSide = "player" | "banker" | "tie";
@@ -71,22 +81,22 @@ export async function handleBaccarat(ctx: Ctx, args: string[]): Promise<void> {
   }
 
   const uid = ctx.authorId;
+  const gid = startGame(uid);
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`bac_player_${uid}_${amount}`)
+      .setCustomId(`bac_player_${uid}_${amount}_${gid}`)
       .setLabel("플레이어")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(`bac_tie_${uid}_${amount}`)
+      .setCustomId(`bac_tie_${uid}_${amount}_${gid}`)
       .setLabel("타이")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(`bac_banker_${uid}_${amount}`)
+      .setCustomId(`bac_banker_${uid}_${amount}_${gid}`)
       .setLabel("뱅커")
       .setStyle(ButtonStyle.Secondary),
   );
 
-  activeGamblers.add(uid);
   ctx.reply({
     embeds: [
       new EmbedBuilder()
@@ -99,34 +109,26 @@ export async function handleBaccarat(ctx: Ctx, args: string[]): Promise<void> {
 }
 
 export async function handleBaccaratButton(interaction: ButtonInteraction): Promise<void> {
-  const parts = interaction.customId.split("_");
-  const side = parts[1] as BacSide;
-  const userId = parts[2];
-  const amount = parseInt(parts[3]);
+  const [, sideStr, userId, amountStr, gameId] = interaction.customId.split("_");
+  const side = sideStr as BacSide;
+  const amount = parseInt(amountStr);
+  if (!(await claimButton(interaction, userId, gameId))) return;
 
-  if (interaction.user.id !== userId) {
-    interaction.reply({ content: "❌ 이 게임은 당신의 게임이 아닙니다.", ephemeral: true });
-    return;
+  try {
+    await playBaccarat(interaction, side, userId, amount);
+  } finally {
+    endGame(userId);
   }
+}
 
+async function playBaccarat(
+  interaction: ButtonInteraction,
+  side: BacSide,
+  userId: string,
+  amount: number,
+): Promise<void> {
   await interaction.deferUpdate();
 
-  const user = await getUser(interaction.guildId!, userId, interaction.user.username);
-  if (user.balance < amount) {
-    activeGamblers.delete(userId);
-    await interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(0xef4444)
-          .setTitle("🎴 바카라")
-          .setDescription("❌ 잔액이 부족합니다."),
-      ],
-      components: [],
-    });
-    return;
-  }
-
-  let balance = await updateBalanceAndGet(interaction.guildId!, userId, -amount);
   const { player, banker, pVal, bVal, winner } = runBaccarat();
 
   const isTie = winner === "tie";
@@ -137,18 +139,17 @@ export async function handleBaccaratButton(interaction: ButtonInteraction): Prom
     tie: "🤝 타이",
   };
 
+  // 타이 적중 8배, 뱅커 승리 0.95배, 타이인데 다른 쪽 베팅이면 반환
   let delta: number;
-  if (isTie && side === "tie") {
-    delta = amount * 8;
-    balance = await updateBalanceAndGet(interaction.guildId!, userId, amount + delta);
-  } else if (isTie) {
-    delta = 0;
-    balance = await updateBalanceAndGet(interaction.guildId!, userId, amount);
-  } else if (userWin) {
-    delta = side === "banker" ? Math.floor(amount * 0.95) : amount;
-    balance = await updateBalanceAndGet(interaction.guildId!, userId, amount + delta);
-  } else {
-    delta = -amount;
+  if (isTie) delta = side === "tie" ? amount * 8 : 0;
+  else if (userWin) delta = side === "banker" ? Math.floor(amount * 0.95) : amount;
+  else delta = -amount;
+
+  // 결과를 먼저 뽑고 손익을 한 번에 반영한다 (예전: 잔액 조회 → 차감 → 지급으로 DB 왕복 최대 6번)
+  const balance = await tryAdjustBalance(interaction.guildId!, userId, delta, amount);
+  if (balance === null) {
+    await interaction.editReply({ embeds: [insufficientEmbed("🎴 바카라")], components: [] });
+    return;
   }
 
   const resultText = isTie
@@ -240,5 +241,4 @@ export async function handleBaccaratButton(interaction: ButtonInteraction): Prom
         ),
     ],
   });
-  activeGamblers.delete(userId);
 }
