@@ -1,20 +1,15 @@
 import { EmbedBuilder, Message, ChatInputCommandInteraction, GuildMember } from "discord.js";
-import https from "https";
-import {
-  kstNow,
-  toNeisDateStr,
-  fetchWithRetry,
-  NEIS_KEY,
-  ATPT_CODE,
-  SCHOOL_CODE,
-} from "../utils.js";
+import { kstNow, toNeisDateStr, fetchWithRetry, fetchNeis } from "../utils.js";
 import { Ctx, ctxFromMessage, ctxFromInteraction } from "../ctx.js";
+import { TtlCache } from "../cache.js";
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
 const CLASS_COLORS = [0x3b82f6, 0x10b981, 0xf59e0b, 0x8b5cf6, 0xef4444, 0xec4899];
 
-const CACHE_TTL = 30 * 60 * 1000;
-const timetableCache = new Map<string, { rows: TimetableRow[]; cachedAt: number }>();
+// 시간표는 하루 중에 거의 바뀌지 않는다. 방학/주말처럼 데이터가 없는 경우도 짧게 캐시한다.
+const TIMETABLE_TTL_MS = 30 * 60 * 1000;
+const NO_TIMETABLE_TTL_MS = 10 * 60 * 1000;
+const timetableCache = new TtlCache<TimetableRow[] | null>(300);
 
 interface ClassInfo {
   grade: number;
@@ -26,17 +21,14 @@ interface TimetableRow {
   subject: string;
 }
 
-function getClassFromRoles(member: NonNullable<Message["member"]>): ClassInfo | null {
+// "3반" → 2학년 3반, "2-1" → 2학년 1반
+function getClassFromRoles(member: GuildMember): ClassInfo | null {
   for (const role of member.roles.cache.values()) {
     const simpleMatch = role.name.match(/^(\d+)반$/);
     if (simpleMatch) return { grade: 2, classNum: parseInt(simpleMatch[1]) };
 
     const fullMatch = role.name.match(/^(\d+)-(\d+)$/);
-    if (fullMatch)
-      return {
-        grade: parseInt(fullMatch[1]),
-        classNum: parseInt(fullMatch[2]),
-      };
+    if (fullMatch) return { grade: parseInt(fullMatch[1]), classNum: parseInt(fullMatch[2]) };
   }
   return null;
 }
@@ -54,56 +46,32 @@ function getTargetDate(): Date {
   return target;
 }
 
-function fetchTimetable(
+async function fetchTimetable(
   dateStr: string,
   grade: number,
   classNum: number,
 ): Promise<TimetableRow[] | null> {
-  const url =
-    `https://open.neis.go.kr/hub/hisTimetable` +
-    `?KEY=${NEIS_KEY}&Type=json&pIndex=1&pSize=100` +
-    `&ATPT_OFCDC_SC_CODE=${ATPT_CODE}` +
-    `&SD_SCHUL_CODE=${SCHOOL_CODE}` +
-    `&ALL_TI_YMD=${dateStr}` +
-    `&GRADE=${grade}` +
-    `&CLASS_NM=${classNum}`;
-
-  console.log(`[NEIS] 시간표 요청 — ${dateStr} grade=${grade} class=${classNum}`);
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, (res) => {
-      console.log(`[NEIS] 시간표 응답 — status=${res.statusCode}`);
-      if (res.statusCode !== 200) {
-        res.resume();
-        reject(new Error(`HTTP ${res.statusCode}`));
-        return;
-      }
-      res.setEncoding("utf8");
-      let raw = "";
-      res.on("data", (chunk: string) => (raw += chunk));
-      res.on("end", () => {
-        console.log(`[NEIS] 시간표 raw (${raw.length}B) — ${raw.slice(0, 200)}`);
-        try {
-          const json = JSON.parse(raw);
-          if (!json.hisTimetable) {
-            resolve(null);
-            return;
-          }
-          const rows = json.hisTimetable[1].row;
-          rows.sort((a: any, b: any) => parseInt(a.PERIO) - parseInt(b.PERIO));
-          resolve(
-            rows.map((r: any) => ({
-              period: parseInt(r.PERIO),
-              subject: r.ITRT_CNTNT.trim(),
-            })),
-          );
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-    req.setTimeout(4000, () => req.destroy(new Error("NEIS API 요청 시간 초과")));
-    req.on("error", reject);
+  const json = await fetchNeis("hisTimetable", {
+    pIndex: 1,
+    pSize: 100,
+    ALL_TI_YMD: dateStr,
+    GRADE: grade,
+    CLASS_NM: classNum,
   });
+  const rows: any[] | undefined = json.hisTimetable?.[1]?.row;
+  if (!rows) return null;
+
+  // NEIS가 같은 교시를 중복으로 주는 경우가 있어서 저장 전에 한 번 정리해 둔다
+  const seen = new Set<string>();
+  return rows
+    .map((r) => ({ period: parseInt(r.PERIO), subject: String(r.ITRT_CNTNT).trim() }))
+    .sort((a, b) => a.period - b.period)
+    .filter((r) => {
+      const key = `${r.period}:${r.subject}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 async function executeTimetable(ctx: Ctx, grade: number, classNum: number): Promise<void> {
@@ -115,28 +83,21 @@ async function executeTimetable(ctx: Ctx, grade: number, classNum: number): Prom
 
   try {
     const cacheKey = `${dateStr}:${grade}:${classNum}`;
-    const cached = timetableCache.get(cacheKey);
-
-    let rows: TimetableRow[] | null;
-    if (cached && Date.now() - cached.cachedAt < CACHE_TTL) {
-      rows = cached.rows;
-    } else {
-      rows = await fetchWithRetry(() => fetchTimetable(dateStr, grade, classNum));
-      if (rows) timetableCache.set(cacheKey, { rows, cachedAt: Date.now() });
+    let rows = timetableCache.get(cacheKey);
+    if (rows === undefined) {
+      await ctx.defer();
+      rows = await timetableCache.getOrLoad(
+        cacheKey,
+        () => fetchWithRetry(() => fetchTimetable(dateStr, grade, classNum)),
+        (r) => (r && r.length > 0 ? TIMETABLE_TTL_MS : NO_TIMETABLE_TTL_MS),
+      );
     }
     if (!rows || rows.length === 0) {
       ctx.reply(`😢 ${month}월 ${day}일(${dayName}) 시간표 정보가 없습니다.`);
       return;
     }
 
-    const seen = new Set<string>();
-    const deduped = rows.filter((r) => {
-      const key = `${r.period}:${r.subject}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    const lines = deduped.map((r) => `**${r.period}교시**  -  ${r.subject}`);
+    const lines = rows.map((r) => `**${r.period}교시**  -  ${r.subject}`);
     const color = CLASS_COLORS[(classNum - 1) % CLASS_COLORS.length];
 
     const embed = new EmbedBuilder()
@@ -161,30 +122,33 @@ async function executeTimetable(ctx: Ctx, grade: number, classNum: number): Prom
   }
 }
 
+const CLASS_INPUT_ERROR = "❌ 학년은 1~3, 반은 1 이상의 숫자로 입력해줘! (예: `2-3`)";
+const NO_ROLE_ERROR = "❌ 반 역할이 없습니다. (예: `1반`, `2-1`) 관리자에게 문의하세요.";
+
+function isValidClass(grade: number, classNum: number): boolean {
+  return grade >= 1 && grade <= 3 && classNum >= 1;
+}
+
 export async function handleTimetable(message: Message): Promise<boolean> {
-  const cmd = message.content.trim();
-  const match = cmd.match(/^!(?:시간표|ㅅㄱㅍ)\s*(?:(\d)-(\d+))?$/);
+  const match = message.content.trim().match(/^!(?:시간표|ㅅㄱㅍ)\s*(?:(\d)-(\d+))?$/);
   if (!match) return false;
 
-  let grade: number, classNum: number;
-
+  let info: ClassInfo | null;
   if (match[1] && match[2]) {
-    grade = parseInt(match[1]);
-    classNum = parseInt(match[2]);
-    if (grade < 1 || grade > 3 || classNum < 1) {
+    info = { grade: parseInt(match[1]), classNum: parseInt(match[2]) };
+    if (!isValidClass(info.grade, info.classNum)) {
       message.reply("❌ 학년은 1~3, 반은 1 이상의 숫자로 입력해줘! (예: `!시간표 2-3`)");
       return true;
     }
   } else {
-    const info = getClassFromRoles(message.member!);
+    info = message.member ? getClassFromRoles(message.member) : null;
     if (!info) {
-      message.reply("❌ 반 역할이 없습니다. (예: `1반`, `2-1`) 관리자에게 문의하세요.");
+      message.reply(NO_ROLE_ERROR);
       return true;
     }
-    ({ grade, classNum } = info);
   }
 
-  await executeTimetable(ctxFromMessage(message), grade, classNum);
+  await executeTimetable(ctxFromMessage(message), info.grade, info.classNum);
   return true;
 }
 
@@ -193,18 +157,16 @@ export async function handleTimetableSlash(
 ): Promise<void> {
   const input = interaction.options.getString("학년반");
 
-  let grade: number, classNum: number;
-
+  let info: ClassInfo | null;
   if (input) {
     const match = input.match(/^(\d)-(\d+)$/);
     if (!match) {
       await interaction.reply("❌ 올바른 형식으로 입력해줘! (예: `2-3`)");
       return;
     }
-    grade = parseInt(match[1]);
-    classNum = parseInt(match[2]);
-    if (grade < 1 || grade > 3 || classNum < 1) {
-      await interaction.reply("❌ 학년은 1~3, 반은 1 이상의 숫자로 입력해줘! (예: `2-3`)");
+    info = { grade: parseInt(match[1]), classNum: parseInt(match[2]) };
+    if (!isValidClass(info.grade, info.classNum)) {
+      await interaction.reply(CLASS_INPUT_ERROR);
       return;
     }
   } else {
@@ -215,25 +177,12 @@ export async function handleTimetableSlash(
       );
       return;
     }
-    let found: ClassInfo | null = null;
-    for (const role of member.roles.cache.values()) {
-      const simpleMatch = role.name.match(/^(\d+)반$/);
-      if (simpleMatch) {
-        found = { grade: 2, classNum: parseInt(simpleMatch[1]) };
-        break;
-      }
-      const fullMatch = role.name.match(/^(\d+)-(\d+)$/);
-      if (fullMatch) {
-        found = { grade: parseInt(fullMatch[1]), classNum: parseInt(fullMatch[2]) };
-        break;
-      }
-    }
-    if (!found) {
-      await interaction.reply("❌ 반 역할이 없습니다. (예: `1반`, `2-1`) 관리자에게 문의하세요.");
+    info = getClassFromRoles(member);
+    if (!info) {
+      await interaction.reply(NO_ROLE_ERROR);
       return;
     }
-    ({ grade, classNum } = found);
   }
 
-  await executeTimetable(ctxFromInteraction(interaction), grade, classNum);
+  await executeTimetable(ctxFromInteraction(interaction), info.grade, info.classNum);
 }

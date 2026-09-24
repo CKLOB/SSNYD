@@ -1,4 +1,11 @@
-import { Message, Client, TextChannel, ChatInputCommandInteraction } from "discord.js";
+import {
+  Message,
+  Client,
+  TextChannel,
+  ChatInputCommandInteraction,
+  MessageFlags,
+} from "discord.js";
+import { onEveryKstMinute } from "../utils.js";
 import {
   addSchedule,
   getAllSchedules,
@@ -15,6 +22,7 @@ type SetupStep =
 
 interface PendingState {
   step: SetupStep;
+  startedAt: number;
   channelId?: string;
   channelName?: string;
   message?: string;
@@ -28,7 +36,19 @@ interface PendingState {
 
 const DAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
 
+// 설정 마법사를 시작해 놓고 잊어버리면, 그 뒤 채널에 치는 아무 말이나 마법사 입력으로 먹혀 버린다.
+// 일정 시간이 지나면 자동으로 취소한다.
+const PENDING_TTL_MS = 10 * 60 * 1000;
 const pendingSetup = new Map<string, PendingState>();
+
+function getPending(key: string): PendingState | undefined {
+  const state = pendingSetup.get(key);
+  if (state && Date.now() - state.startedAt > PENDING_TTL_MS) {
+    pendingSetup.delete(key);
+    return undefined;
+  }
+  return state;
+}
 
 function pendingKey(userId: string, guildId: string): string {
   return `${userId}:${guildId}`;
@@ -180,56 +200,124 @@ function shouldFire(s: Schedule, kst: Date): boolean {
   }
 }
 
-export function initScheduler(client: Client): void {
-  let lastFiredMinute = -1;
-  let isRunning = false;
+// 활성 스케줄을 메모리에 들고 있다가 매분 여기서 판정한다 (예전엔 매분 DB 전체 조회).
+// 등록/삭제 시 다시 읽고, 혹시 모를 외부 변경에 대비해 매시 정각에도 다시 읽는다.
+let activeSchedules: Schedule[] = [];
 
-  setInterval(async () => {
-    const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
-    const minuteKey = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+async function reloadSchedules(): Promise<void> {
+  activeSchedules = await getAllSchedules();
+}
 
-    if (minuteKey === lastFiredMinute) return;
-    if (isRunning) return;
+function reloadSchedulesInBackground(): void {
+  reloadSchedules().catch((e: Error) => console.error("스케줄 조회 실패:", e.message));
+}
 
-    isRunning = true;
-    lastFiredMinute = minuteKey;
-
-    try {
-      let schedules: Schedule[];
-      try {
-        schedules = await getAllSchedules();
-      } catch (e) {
-        console.error("스케줄 조회 실패:", (e as Error).message);
-        return;
-      }
-
-      for (const s of schedules) {
-        if (!shouldFire(s, kst)) continue;
-
-        let channel = client.channels.cache.get(s.channel_id);
-        if (!channel) {
-          try {
-            channel = (await client.channels.fetch(s.channel_id)) ?? undefined;
-          } catch (e) {
-            console.error(`채널 페치 실패 (채널 ${s.channel_id}):`, (e as Error).message);
-          }
-        }
-        if (channel?.isTextBased()) {
-          (channel as TextChannel).send(s.message).catch((e: Error) => {
-            console.error(`메시지 전송 실패 (채널 ${s.channel_id}):`, e.message);
-          });
-        }
-
-        if (s.schedule_type === "once") {
-          deactivateSchedule(s.id).catch((e: Error) => {
-            console.error(`스케줄 비활성화 실패 (id ${s.id}):`, e.message);
-          });
-        }
-      }
-    } finally {
-      isRunning = false;
+export async function initScheduler(client: Client): Promise<void> {
+  await reloadSchedules().catch((e: Error) => console.error("스케줄 조회 실패:", e.message));
+  // 분마다 발송 대상이 겹치지 않으므로, 앞 분 발송이 늦어져도 다음 분을 건너뛰지 않고 그대로 진행한다
+  onEveryKstMinute(async (kst) => {
+    // 다시 읽기에 실패해도 들고 있던 목록으로 발송은 계속한다
+    if (kst.getUTCMinutes() === 0) {
+      await reloadSchedules().catch((e: Error) => console.error("스케줄 조회 실패:", e.message));
     }
-  }, 30 * 1000);
+    await fireSchedules(client, kst);
+  });
+}
+
+async function fireSchedules(client: Client, kst: Date): Promise<void> {
+  const due = activeSchedules.filter((s) => shouldFire(s, kst));
+  await Promise.all(
+    due.map(async (s) => {
+      let channel = client.channels.cache.get(s.channel_id);
+      if (!channel) {
+        try {
+          channel = (await client.channels.fetch(s.channel_id)) ?? undefined;
+        } catch (e) {
+          console.error(`채널 페치 실패 (채널 ${s.channel_id}):`, (e as Error).message);
+        }
+      }
+      if (channel?.isTextBased()) {
+        await (channel as TextChannel).send(s.message).catch((e: Error) => {
+          console.error(`메시지 전송 실패 (채널 ${s.channel_id}):`, e.message);
+        });
+      }
+
+      if (s.schedule_type === "once") {
+        activeSchedules = activeSchedules.filter((x) => x.id !== s.id);
+        await deactivateSchedule(s.id).catch((e: Error) => {
+          console.error(`스케줄 비활성화 실패 (id ${s.id}):`, e.message);
+        });
+      }
+    }),
+  );
+}
+
+interface NewSchedule {
+  channelId: string;
+  channelName: string;
+  message: string;
+  hour: number;
+  minute: number;
+  scheduleType: ScheduleType;
+  weekdaysJson: string | null;
+  dayOfMonth: number | null;
+  targetDate: string | null;
+}
+
+// 저장하고 확인 문구를 돌려준다 (텍스트 마법사 / 슬래시 공통)
+async function saveSchedule(guildId: string, n: NewSchedule): Promise<string> {
+  await addSchedule(
+    guildId,
+    n.channelId,
+    n.channelName,
+    sanitizeMessage(n.message),
+    n.hour,
+    n.minute,
+    n.scheduleType,
+    n.weekdaysJson,
+    n.dayOfMonth,
+    n.targetDate,
+  );
+  reloadSchedulesInBackground();
+  const hh = String(n.hour).padStart(2, "0");
+  const mm = String(n.minute).padStart(2, "0");
+  const label = formatScheduleLabel(n.scheduleType, n.weekdaysJson, n.dayOfMonth, n.targetDate);
+  return `✅ **[${label}] ${hh}:${mm}**에 **#${n.channelName}** 채널로 메세지를 보낼게요.`;
+}
+
+// 디스코드 메시지는 2000자 제한이 있어서 알림이 많으면 목록이 전송 자체가 실패했다
+const MAX_LIST_LENGTH = 1900;
+
+async function listSchedulesText(guildId: string): Promise<string> {
+  const schedules = await getSchedules(guildId);
+  if (schedules.length === 0) return "📭 등록된 알림이 없습니다.";
+
+  let text = "📋 **등록된 알림 목록**";
+  for (const [i, s] of schedules.entries()) {
+    const hh = String(s.hour).padStart(2, "0");
+    const mm = String(s.minute).padStart(2, "0");
+    const line = `\n${s.id}. **[${scheduleLabel(s)}] ${hh}:${mm}** → **#${s.channel_name}** — ${s.message}`;
+    if (text.length + line.length > MAX_LIST_LENGTH) {
+      text += `\n… 외 ${schedules.length - i}개`;
+      break;
+    }
+    text += line;
+  }
+  return text;
+}
+
+async function deleteAllSchedulesText(guildId: string): Promise<string> {
+  const count = await deleteAllSchedules(guildId);
+  if (count > 0) reloadSchedulesInBackground();
+  return count === 0
+    ? "📭 삭제할 알림이 없습니다."
+    : `✅ 이 서버의 알림 **${count}개**를 모두 삭제했습니다.`;
+}
+
+async function deleteScheduleText(guildId: string, num: number): Promise<string> {
+  const deleted = await deleteSchedule(num, guildId);
+  if (deleted) reloadSchedulesInBackground();
+  return deleted ? `✅ ${num}번 알림을 삭제했습니다.` : `❌ ${num}번 알림을 찾을 수 없습니다.`;
 }
 
 async function saveAndConfirm(
@@ -237,30 +325,18 @@ async function saveAndConfirm(
   state: PendingState,
   guildId: string,
 ): Promise<void> {
-  const weekdaysJson = state.weekdays ? JSON.stringify(state.weekdays) : null;
-  await addSchedule(
-    guildId,
-    state.channelId!,
-    state.channelName!,
-    sanitizeMessage(state.message!),
-    state.hour!,
-    state.minute!,
-    state.scheduleType!,
-    weekdaysJson,
-    state.dayOfMonth ?? null,
-    state.targetDate ?? null,
-  );
-  const hh = String(state.hour).padStart(2, "0");
-  const mm = String(state.minute).padStart(2, "0");
-  const label = formatScheduleLabel(
-    state.scheduleType!,
-    weekdaysJson,
-    state.dayOfMonth ?? null,
-    state.targetDate ?? null,
-  );
-  await message.reply(
-    `✅ **[${label}] ${hh}:${mm}**에 **#${state.channelName}** 채널로 메세지를 보낼게요.`,
-  );
+  const text = await saveSchedule(guildId, {
+    channelId: state.channelId!,
+    channelName: state.channelName!,
+    message: state.message!,
+    hour: state.hour!,
+    minute: state.minute!,
+    scheduleType: state.scheduleType!,
+    weekdaysJson: state.weekdays ? JSON.stringify(state.weekdays) : null,
+    dayOfMonth: state.dayOfMonth ?? null,
+    targetDate: state.targetDate ?? null,
+  });
+  await message.reply(text);
 }
 
 const SCHEDULE_TYPE_MENU = `🔄 반복 유형을 선택해주세요:
@@ -279,8 +355,10 @@ export async function handleScheduler(message: Message): Promise<boolean> {
   const guildId = message.guild.id;
   const key = pendingKey(userId, guildId);
 
+  const state = getPending(key);
+
   if (content === "!보내기취소") {
-    if (pendingSetup.has(key)) {
+    if (state) {
       pendingSetup.delete(key);
       message.reply("✅ 설정을 취소했습니다.");
     } else {
@@ -289,9 +367,7 @@ export async function handleScheduler(message: Message): Promise<boolean> {
     return true;
   }
 
-  if (pendingSetup.has(key)) {
-    const state = pendingSetup.get(key)!;
-
+  if (state) {
     if (state.step === "channel") {
       const mentioned = message.mentions.channels.first();
       if (!mentioned) {
@@ -404,7 +480,7 @@ export async function handleScheduler(message: Message): Promise<boolean> {
   }
 
   if (content === "!보내기") {
-    pendingSetup.set(key, { step: "channel" });
+    pendingSetup.set(key, { step: "channel", startedAt: Date.now() });
     message.reply(
       "📌 어떤 채널에 보낼까요? 채널을 멘션해주세요. 예: `#일반`\n(취소: `!보내기취소`)",
     );
@@ -412,44 +488,22 @@ export async function handleScheduler(message: Message): Promise<boolean> {
   }
 
   if (content === "!알림목록") {
-    const schedules = await getSchedules(guildId);
-    if (schedules.length === 0) {
-      message.reply("📭 등록된 알림이 없습니다.");
-    } else {
-      const list = schedules
-        .map((s) => {
-          const hh = String(s.hour).padStart(2, "0");
-          const mm = String(s.minute).padStart(2, "0");
-          return `${s.id}. **[${scheduleLabel(s)}] ${hh}:${mm}** → **#${s.channel_name}** — ${s.message}`;
-        })
-        .join("\n");
-      message.reply(`📋 **등록된 알림 목록**\n${list}`);
-    }
+    await message.reply(await listSchedulesText(guildId));
     return true;
   }
 
   if (content === "!알림삭제전체") {
-    const count = await deleteAllSchedules(guildId);
-    if (count === 0) {
-      message.reply("📭 삭제할 알림이 없습니다.");
-    } else {
-      message.reply(`✅ 이 서버의 알림 **${count}개**를 모두 삭제했습니다.`);
-    }
+    await message.reply(await deleteAllSchedulesText(guildId));
     return true;
   }
 
   if (content.startsWith("!알림삭제")) {
     const num = parseInt(content.slice("!알림삭제".length).trim());
-    if (isNaN(num)) {
-      message.reply("❌ 올바른 번호를 입력하세요. `!알림목록`으로 번호를 확인하세요.");
-    } else {
-      const deleted = await deleteSchedule(num, guildId);
-      if (deleted) {
-        message.reply(`✅ ${num}번 알림을 삭제했습니다.`);
-      } else {
-        message.reply(`❌ ${num}번 알림을 찾을 수 없습니다.`);
-      }
-    }
+    await message.reply(
+      isNaN(num)
+        ? "❌ 올바른 번호를 입력하세요. `!알림목록`으로 번호를 확인하세요."
+        : await deleteScheduleText(guildId, num),
+    );
     return true;
   }
 
@@ -462,7 +516,7 @@ export async function handleSchedulerSlash(
   if (!interaction.guildId) {
     await interaction.reply({
       content: "❌ 이 명령어는 서버에서만 사용할 수 있습니다.",
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -483,7 +537,7 @@ export async function handleSchedulerSlash(
       if (!match) {
         await interaction.reply({
           content: "❌ 시간 형식이 올바르지 않습니다. 예: `08:30`",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -492,7 +546,7 @@ export async function handleSchedulerSlash(
       if (hour > 23 || minute > 59) {
         await interaction.reply({
           content: "❌ 올바른 시간을 입력하세요. (00:00 ~ 23:59)",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -505,7 +559,7 @@ export async function handleSchedulerSlash(
         if (!weekdayStr) {
           await interaction.reply({
             content: "❌ `매주` 반복은 `요일` 옵션이 필요합니다. 예: `월,금`",
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
           return;
         }
@@ -513,7 +567,7 @@ export async function handleSchedulerSlash(
         if (!days) {
           await interaction.reply({
             content: "❌ 요일 형식이 올바르지 않습니다. 예: `월,금` 또는 `1,5`",
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
           return;
         }
@@ -522,7 +576,7 @@ export async function handleSchedulerSlash(
         if (!dateStr) {
           await interaction.reply({
             content: "❌ `매월` 반복은 `날짜` 옵션에 날짜(1~31)를 입력하세요.",
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
           return;
         }
@@ -530,7 +584,7 @@ export async function handleSchedulerSlash(
         if (isNaN(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) {
           await interaction.reply({
             content: "❌ 날짜는 1~31 사이의 숫자로 입력하세요.",
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
           return;
         }
@@ -538,7 +592,7 @@ export async function handleSchedulerSlash(
         if (!dateStr) {
           await interaction.reply({
             content: "❌ `1회` 반복은 `날짜` 옵션에 날짜(YYYY-MM-DD)를 입력하세요.",
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
           return;
         }
@@ -546,71 +600,39 @@ export async function handleSchedulerSlash(
         if (!targetDate) {
           await interaction.reply({
             content: "❌ 날짜 형식이 올바르지 않습니다. 예: `2026-07-04`",
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
           return;
         }
       }
 
-      const sanitized = sanitizeMessage(msg);
-      await addSchedule(
-        guildId,
-        channel.id,
-        channel.name,
-        sanitized,
+      const text = await saveSchedule(guildId, {
+        channelId: channel.id,
+        channelName: channel.name,
+        message: msg,
         hour,
         minute,
-        repeatType,
+        scheduleType: repeatType,
         weekdaysJson,
         dayOfMonth,
         targetDate,
-      );
+      });
+      await interaction.reply(text);
+      break;
+    }
 
-      const hh = String(hour).padStart(2, "0");
-      const mm = String(minute).padStart(2, "0");
-      const label = formatScheduleLabel(repeatType, weekdaysJson, dayOfMonth, targetDate);
+    case "알림목록":
+      await interaction.reply(await listSchedulesText(guildId));
+      break;
+
+    case "알림삭제전체":
+      await interaction.reply(await deleteAllSchedulesText(guildId));
+      break;
+
+    case "알림삭제":
       await interaction.reply(
-        `✅ **[${label}] ${hh}:${mm}**에 **#${channel.name}** 채널로 메세지를 보낼게요.`,
+        await deleteScheduleText(guildId, interaction.options.getInteger("번호", true)),
       );
       break;
-    }
-
-    case "알림목록": {
-      const schedules = await getSchedules(guildId);
-      if (schedules.length === 0) {
-        await interaction.reply("📭 등록된 알림이 없습니다.");
-      } else {
-        const list = schedules
-          .map((s) => {
-            const hh = String(s.hour).padStart(2, "0");
-            const mm = String(s.minute).padStart(2, "0");
-            return `${s.id}. **[${scheduleLabel(s)}] ${hh}:${mm}** → **#${s.channel_name}** — ${s.message}`;
-          })
-          .join("\n");
-        await interaction.reply(`📋 **등록된 알림 목록**\n${list}`);
-      }
-      break;
-    }
-
-    case "알림삭제전체": {
-      const count = await deleteAllSchedules(guildId);
-      if (count === 0) {
-        await interaction.reply("📭 삭제할 알림이 없습니다.");
-      } else {
-        await interaction.reply(`✅ 이 서버의 알림 **${count}개**를 모두 삭제했습니다.`);
-      }
-      break;
-    }
-
-    case "알림삭제": {
-      const num = interaction.options.getInteger("번호", true);
-      const deleted = await deleteSchedule(num, guildId);
-      if (deleted) {
-        await interaction.reply(`✅ ${num}번 알림을 삭제했습니다.`);
-      } else {
-        await interaction.reply(`❌ ${num}번 알림을 찾을 수 없습니다.`);
-      }
-      break;
-    }
   }
 }

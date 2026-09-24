@@ -11,6 +11,7 @@
   },
   "scripts": {
     "start": "tsx index.ts",
+    "test": "tsx --test \"**/*.test.ts\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

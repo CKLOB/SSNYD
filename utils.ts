@@ -43,6 +43,53 @@ async function fetchWithRetry<T>(fn: () => Promise<T>, maxRetries = 2): Promise<
   throw lastErr;
 }
 
+// 전역 fetch(undici)는 연결을 재사용(keep-alive)해서, 매 요청마다 TLS 핸드셰이크를 새로 하던
+// https.get보다 연속 요청이 빠르다.
+async function fetchJson<T = any>(url: string, timeoutMs = 4000): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+  } catch (err) {
+    if ((err as Error).name === "TimeoutError") throw new Error("요청 시간 초과");
+    throw err;
+  }
+  if (!res.ok) {
+    await res.body?.cancel();
+    throw new Error(`HTTP ${res.status}`);
+  }
+  return (await res.json()) as T;
+}
+
+// NEIS Open API 공통 호출 — 학교 코드와 인증키는 여기서 채운다
+function fetchNeis<T = any>(
+  service: string,
+  params: Record<string, string | number>,
+  timeoutMs?: number,
+): Promise<T> {
+  const query = new URLSearchParams({
+    KEY: NEIS_KEY,
+    Type: "json",
+    ATPT_OFCDC_SC_CODE: ATPT_CODE,
+    SD_SCHUL_CODE: SCHOOL_CODE,
+  });
+  for (const [k, v] of Object.entries(params)) query.set(k, String(v));
+  return fetchJson<T>(`https://open.neis.go.kr/hub/${service}?${query}`, timeoutMs);
+}
+
+// KST 기준 분이 바뀔 때마다 한 번씩 콜백을 부른다 (30초 폴링이라 같은 분에 두 번 불리지 않게 막는다)
+function onEveryKstMinute(cb: (kst: Date) => void | Promise<void>): void {
+  let lastFiredMinute = -1;
+  setInterval(() => {
+    const kst = kstNow();
+    const minuteKey = kst.getUTCHours() * 60 + kst.getUTCMinutes();
+    if (minuteKey === lastFiredMinute) return;
+    lastFiredMinute = minuteKey;
+    Promise.resolve()
+      .then(() => cb(kst))
+      .catch((err) => console.error("[Timer]", (err as Error).message));
+  }, 30 * 1000);
+}
+
 const fallbackFileCache = new Map<string, unknown>();
 const fallbackMtimeCache = new Map<string, number>();
 
@@ -90,6 +137,9 @@ export {
   toKSTDateStr,
   toNeisDateStr,
   fetchWithRetry,
+  fetchJson,
+  fetchNeis,
+  onEveryKstMinute,
   getFallbackMeal,
   getFallbackSchedule,
   NEIS_KEY,
