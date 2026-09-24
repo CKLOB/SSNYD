@@ -6,7 +6,17 @@ import {
 } from "discord.js";
 
 const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
-  new SlashCommandBuilder().setName("밥").setDescription("현재 시간대 급식을 확인합니다").toJSON(),
+  new SlashCommandBuilder()
+    .setName("밥")
+    .setDescription("현재 시간대 급식을 확인합니다")
+    .addStringOption((opt) =>
+      opt
+        .setName("설정")
+        .setDescription("급식 기능 on/off (관리자 전용)")
+        .setRequired(false)
+        .addChoices({ name: "on", value: "on" }, { name: "off", value: "off" }),
+    )
+    .toJSON(),
 
   new SlashCommandBuilder()
     .setName("급식")
