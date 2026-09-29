@@ -35,9 +35,20 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
     .addStringOption((opt) =>
       opt
         .setName("날짜")
-        .setDescription("오늘 또는 내일 (기본: 오늘)")
+        .setDescription("오늘, 내일 또는 모레 (기본: 오늘)")
         .setRequired(false)
-        .addChoices({ name: "오늘", value: "오늘" }, { name: "내일", value: "내일" }),
+        .addChoices(
+          { name: "오늘", value: "오늘" },
+          { name: "내일", value: "내일" },
+          { name: "모레", value: "모레" },
+        ),
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName("특정날짜")
+        .setDescription("조회할 날짜 (예: 10/5, 1005, 2026-10-05) — 입력 시 날짜 선택보다 우선")
+        .setRequired(false)
+        .setMaxLength(10),
     )
     .toJSON(),
 

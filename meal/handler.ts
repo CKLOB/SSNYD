@@ -11,7 +11,7 @@ import { getMealEnabled, setMealEnabled } from "../db.js";
 import { Ctx, ctxFromMessage, ctxFromInteraction, handleAdminToggle } from "../ctx.js";
 import { TtlCache } from "../cache.js";
 
-type MealDay = "auto" | "today" | "tomorrow";
+type MealDay = "auto" | "today" | "tomorrow" | "dayAfter";
 
 // 텍스트 명령 → (끼니, 날짜). "auto"는 지금 시각 기준 다음 끼니.
 const MEAL_CMDS: Record<string, { type: number; day: MealDay }> = {
@@ -31,6 +31,9 @@ const MEAL_CMDS: Record<string, { type: number; day: MealDay }> = {
   "!내일아침": { type: 1, day: "tomorrow" },
   "!내일점심": { type: 2, day: "tomorrow" },
   "!내일저녁": { type: 3, day: "tomorrow" },
+  "!모레아침": { type: 1, day: "dayAfter" },
+  "!모레점심": { type: 2, day: "dayAfter" },
+  "!모레저녁": { type: 3, day: "dayAfter" },
 };
 
 const MEAL_LABELS: Record<number, string> = { 1: "조식", 2: "중식", 3: "석식" };
@@ -62,12 +65,34 @@ function resolveMeal(type: number, day: MealDay): MealTarget {
 
   if (day === "today") return { type, dateStr: todayStr, dayLabel: "오늘" };
   if (day === "tomorrow") return { type, dateStr: tomorrowStr, dayLabel: "내일" };
+  if (day === "dayAfter")
+    return { type, dateStr: toNeisDateStr(new Date(kst.getTime() + 2 * DAY_MS)), dayLabel: "모레" };
 
   const t = kst.getUTCHours() * 60 + kst.getUTCMinutes();
   if (t < 7 * 60 + 40) return { type: 1, dateStr: todayStr, dayLabel: "오늘" };
   if (t < 12 * 60 + 40) return { type: 2, dateStr: todayStr, dayLabel: "오늘" };
   if (t < 18 * 60 + 40) return { type: 3, dateStr: todayStr, dayLabel: "오늘" };
   return { type: 1, dateStr: tomorrowStr, dayLabel: "내일" };
+}
+
+// "10/5", "10-05", "1005", "2026-10-05", "20261005" 같은 입력을 NEIS 날짜(YYYYMMDD)로 바꾼다.
+// 연도를 생략하면 올해로 본다. 형식이 틀리거나 없는 날짜(2/30 등)면 null.
+export function parseMealDate(input: string, currentYear: number): string | null {
+  const s = input.trim().replace(/\s+/g, "");
+  const m =
+    s.match(/^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$/) ??
+    s.match(/^(\d{4})(\d{2})(\d{2})$/) ??
+    s.match(/^()(\d{1,2})[./-](\d{1,2})$/) ??
+    s.match(/^()(\d{2})(\d{2})$/);
+  if (!m) return null;
+  const y = m[1] ? Number(m[1]) : currentYear;
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) {
+    return null;
+  }
+  return toNeisDateStr(date);
 }
 
 async function fetchMeal(dateStr: string, mealType: number): Promise<MealResult | null> {
@@ -217,6 +242,23 @@ export async function handleMealSlash(interaction: ChatInputCommandInteraction):
   // commandName === "급식"
   const mealMap: Record<string, number> = { 아침: 1, 점심: 2, 저녁: 3 };
   const type = mealMap[interaction.options.getString("끼니", true)];
-  const day = interaction.options.getString("날짜") === "내일" ? "tomorrow" : "today";
+
+  // 특정날짜가 있으면 날짜 선택보다 우선한다
+  const customDate = interaction.options.getString("특정날짜");
+  if (customDate) {
+    const dateStr = parseMealDate(customDate, kstNow().getUTCFullYear());
+    if (!dateStr) {
+      await ctx.replyPrivate(
+        "❌ 날짜 형식이 올바르지 않습니다. 예: `10/5`, `1005`, `2026-10-05`, `20261005`",
+      );
+      return;
+    }
+    const dayLabel = `${parseInt(dateStr.slice(4, 6))}월 ${parseInt(dateStr.slice(6, 8))}일`;
+    await executeMeal(ctx, { type, dateStr, dayLabel });
+    return;
+  }
+
+  const dayMap: Record<string, MealDay> = { 오늘: "today", 내일: "tomorrow", 모레: "dayAfter" };
+  const day = dayMap[interaction.options.getString("날짜") ?? "오늘"] ?? "today";
   await executeMeal(ctx, resolveMeal(type, day));
 }
