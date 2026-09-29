@@ -4,12 +4,20 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ButtonInteraction,
+  MessageFlags,
 } from "discord.js";
-import { getUser, updateBalance } from "../../db.js";
-import { parseBet, fmt, activeGamblers, createDeck, Card } from "./shared.js";
+import {
+  getUser,
+  getBalance,
+  updateBalance,
+  tryAdjustBalance,
+  updateBalanceAndGet,
+} from "../../db.js";
+import { parseBet, fmt, startGame, endGame, createDeck, Card } from "./shared.js";
 import { Ctx } from "../../ctx.js";
 
 interface BjGame {
+  id: string;
   deck: Card[];
   player: Card[];
   dealer: Card[];
@@ -18,15 +26,16 @@ interface BjGame {
   createdAt: number;
 }
 
+const BJ_TTL_MS = 15 * 60 * 1000;
 const bjGames = new Map<string, BjGame>();
 
 setInterval(
   () => {
     const now = Date.now();
     for (const [userId, game] of bjGames) {
-      if (now - game.createdAt > 15 * 60 * 1000) {
+      if (now - game.createdAt > BJ_TTL_MS) {
         bjGames.delete(userId);
-        activeGamblers.delete(userId);
+        endGame(userId);
         updateBalance(game.guildId, userId, game.bet).catch((e: Error) => {
           console.error(`[BJ TTL] 환불 실패 (user ${userId}):`, e.message);
         });
@@ -53,14 +62,14 @@ function bjHandStr(hand: Card[], hideSecond = false): string {
   return hand.map((c, i) => (hideSecond && i === 1 ? "🂠" : `${c.s}${c.v}`)).join("  ");
 }
 
-function buildBjRow(userId: string): ActionRowBuilder<ButtonBuilder> {
+function buildBjRow(userId: string, gameId: string): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`bj_hit_${userId}`)
+      .setCustomId(`bj_hit_${userId}_${gameId}`)
       .setLabel("히트")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(`bj_stand_${userId}`)
+      .setCustomId(`bj_stand_${userId}_${gameId}`)
       .setLabel("스탠드")
       .setStyle(ButtonStyle.Secondary),
   );
@@ -79,7 +88,11 @@ export async function handleBlackjack(ctx: Ctx, args: string[]): Promise<void> {
     return;
   }
 
-  await updateBalance(ctx.guildId!, ctx.authorId, -amount!);
+  // 잔액 확인과 차감을 한 쿼리로 (그 사이 송금으로 잔액이 줄어도 음수가 되지 않게)
+  if ((await tryAdjustBalance(ctx.guildId!, ctx.authorId, -amount!, amount!)) === null) {
+    ctx.reply("❌ 잔액이 부족합니다");
+    return;
+  }
 
   const deck = createDeck();
   const player = [deck.pop()!, deck.pop()!];
@@ -88,17 +101,16 @@ export async function handleBlackjack(ctx: Ctx, args: string[]): Promise<void> {
   const dVal = bjHandVal(dealer);
 
   if (pVal === 21) {
-    let delta: number, resultText: string;
+    let delta: number, resultText: string, balance: number;
     if (dVal === 21) {
-      await updateBalance(ctx.guildId!, ctx.authorId, amount!);
+      balance = await updateBalanceAndGet(ctx.guildId!, ctx.authorId, amount!);
       delta = 0;
       resultText = "🤝 무승부 (블랙잭 vs 블랙잭)";
     } else {
-      await updateBalance(ctx.guildId!, ctx.authorId, amount! * 2);
+      balance = await updateBalanceAndGet(ctx.guildId!, ctx.authorId, amount! * 2);
       delta = amount!;
       resultText = "🎉 블랙잭! 승리!";
     }
-    const updated = await getUser(ctx.guildId!, ctx.authorId, ctx.username);
     ctx.reply({
       embeds: [
         new EmbedBuilder()
@@ -109,14 +121,17 @@ export async function handleBlackjack(ctx: Ctx, args: string[]): Promise<void> {
             { name: "딜러 패", value: `${bjHandStr(dealer)} (${dVal})`, inline: false },
             { name: "결과", value: resultText, inline: true },
             { name: "손익", value: fmt(delta), inline: true },
-            { name: "현재 잔액", value: `${updated.balance.toLocaleString()}원`, inline: true },
+            { name: "현재 잔액", value: `${balance.toLocaleString()}원`, inline: true },
           ),
       ],
     });
     return;
   }
 
+  // 방치된 게임은 아래 TTL 정리에서 15분 뒤 환불되므로 도박 잠금도 그보다 조금 길게 잡는다
+  const gameId = startGame(ctx.authorId, BJ_TTL_MS + 5 * 60 * 1000);
   bjGames.set(ctx.authorId, {
+    id: gameId,
     deck,
     player,
     dealer,
@@ -124,7 +139,6 @@ export async function handleBlackjack(ctx: Ctx, args: string[]): Promise<void> {
     guildId: ctx.guildId!,
     createdAt: Date.now(),
   });
-  activeGamblers.add(ctx.authorId);
 
   ctx.reply({
     embeds: [
@@ -137,23 +151,27 @@ export async function handleBlackjack(ctx: Ctx, args: string[]): Promise<void> {
         )
         .setFooter({ text: "버튼을 눌러 진행하세요." }),
     ],
-    components: [buildBjRow(ctx.authorId)],
+    components: [buildBjRow(ctx.authorId, gameId)],
   });
 }
 
 export async function handleBjButton(interaction: ButtonInteraction): Promise<void> {
-  const parts = interaction.customId.split("_");
-  const action = parts[1];
-  const userId = parts[2];
+  const [, action, userId, gameId] = interaction.customId.split("_");
 
   if (interaction.user.id !== userId) {
-    interaction.reply({ content: "❌ 이 게임은 당신의 게임이 아닙니다.", ephemeral: true });
+    interaction.reply({
+      content: "❌ 이 게임은 당신의 게임이 아닙니다.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
+  await interaction.deferUpdate();
+
+  // 예전 게임 메시지의 버튼으로 지금 게임을 조작하지 못하게 게임 id까지 맞춰 본다
   const game = bjGames.get(userId);
-  if (!game) {
-    interaction.update({ components: [] });
+  if (!game || game.id !== gameId) {
+    await interaction.editReply({ components: [] });
     return;
   }
 
@@ -163,9 +181,9 @@ export async function handleBjButton(interaction: ButtonInteraction): Promise<vo
 
     if (val > 21) {
       bjGames.delete(userId);
-      activeGamblers.delete(userId);
-      const updated = await getUser(game.guildId, userId, interaction.user.username);
-      interaction.update({
+      endGame(userId);
+      const balance = await getBalance(game.guildId, userId);
+      await interaction.editReply({
         embeds: [
           new EmbedBuilder()
             .setColor(0xef4444)
@@ -179,7 +197,7 @@ export async function handleBjButton(interaction: ButtonInteraction): Promise<vo
               },
               { name: "결과", value: "💥 버스트! 패배", inline: true },
               { name: "손익", value: fmt(-game.bet), inline: true },
-              { name: "현재 잔액", value: `${updated.balance.toLocaleString()}원`, inline: true },
+              { name: "현재 잔액", value: `${balance.toLocaleString()}원`, inline: true },
             ),
         ],
         components: [],
@@ -187,7 +205,7 @@ export async function handleBjButton(interaction: ButtonInteraction): Promise<vo
       return;
     }
 
-    interaction.update({
+    await interaction.editReply({
       embeds: [
         new EmbedBuilder()
           .setColor(0x3b82f6)
@@ -198,35 +216,35 @@ export async function handleBjButton(interaction: ButtonInteraction): Promise<vo
           )
           .setFooter({ text: "버튼을 눌러 진행하세요." }),
       ],
-      components: [buildBjRow(userId)],
+      components: [buildBjRow(userId, gameId)],
     });
     return;
   }
 
   if (action === "stand") {
     bjGames.delete(userId);
-    activeGamblers.delete(userId);
+    endGame(userId);
     while (bjHandVal(game.dealer) < 17) game.dealer.push(game.deck.pop()!);
 
     const pVal = bjHandVal(game.player);
     const dVal = bjHandVal(game.dealer);
 
-    let delta: number, resultText: string;
+    let delta: number, resultText: string, balance: number;
     if (dVal > 21 || pVal > dVal) {
       delta = game.bet;
       resultText = "🎉 승리!";
-      await updateBalance(game.guildId, userId, game.bet * 2);
+      balance = await updateBalanceAndGet(game.guildId, userId, game.bet * 2);
     } else if (pVal === dVal) {
       delta = 0;
       resultText = "🤝 무승부";
-      await updateBalance(game.guildId, userId, game.bet);
+      balance = await updateBalanceAndGet(game.guildId, userId, game.bet);
     } else {
       delta = -game.bet;
       resultText = "😔 패배";
+      balance = await getBalance(game.guildId, userId);
     }
 
-    const updated = await getUser(game.guildId, userId, interaction.user.username);
-    interaction.update({
+    await interaction.editReply({
       embeds: [
         new EmbedBuilder()
           .setColor(delta > 0 ? 0x22c55e : delta === 0 ? 0x6b7280 : 0xef4444)
@@ -236,7 +254,7 @@ export async function handleBjButton(interaction: ButtonInteraction): Promise<vo
             { name: "딜러 패", value: `${bjHandStr(game.dealer)} (${dVal})`, inline: false },
             { name: "결과", value: resultText, inline: true },
             { name: "손익", value: fmt(delta), inline: true },
-            { name: "현재 잔액", value: `${updated.balance.toLocaleString()}원`, inline: true },
+            { name: "현재 잔액", value: `${balance.toLocaleString()}원`, inline: true },
           ),
       ],
       components: [],

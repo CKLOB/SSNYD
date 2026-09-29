@@ -1,6 +1,5 @@
 import { EmbedBuilder, Message, Client, ChatInputCommandInteraction } from "discord.js";
-import https from "https";
-import { kstNow, toNeisDateStr, NEIS_KEY, ATPT_CODE, SCHOOL_CODE } from "../utils.js";
+import { kstNow, toNeisDateStr, fetchNeis } from "../utils.js";
 import { ping as dbPing } from "../db.js";
 import { Ctx, ctxFromMessage, ctxFromInteraction } from "../ctx.js";
 
@@ -10,34 +9,19 @@ interface ApiStatus {
   error?: string;
 }
 
-function checkNeis(): Promise<ApiStatus> {
-  const dateStr = toNeisDateStr(kstNow());
-  const url =
-    `https://open.neis.go.kr/hub/mealServiceDietInfo` +
-    `?KEY=${NEIS_KEY}&Type=json&pIndex=1&pSize=1` +
-    `&ATPT_OFCDC_SC_CODE=${ATPT_CODE}` +
-    `&SD_SCHUL_CODE=${SCHOOL_CODE}` +
-    `&MLSV_YMD=${dateStr}` +
-    `&MMEAL_SC_CODE=2`;
-
-  return new Promise((resolve) => {
-    const start = Date.now();
-    const req = https.get(url, (res) => {
-      res.resume();
-      if (res.statusCode !== 200) {
-        resolve({ ok: false, ms: null, error: `HTTP ${res.statusCode}` });
-      } else {
-        resolve({ ok: true, ms: Date.now() - start });
-      }
-    });
-    req.setTimeout(5000, () => {
-      req.destroy();
-      resolve({ ok: false, ms: null, error: "timeout (5s 초과)" });
-    });
-    req.on("error", (err: Error) => {
-      resolve({ ok: false, ms: null, error: err.message });
-    });
-  });
+async function checkNeis(): Promise<ApiStatus> {
+  const start = Date.now();
+  try {
+    await fetchNeis(
+      "mealServiceDietInfo",
+      { pIndex: 1, pSize: 1, MLSV_YMD: toNeisDateStr(kstNow()), MMEAL_SC_CODE: 2 },
+      5000,
+    );
+    return { ok: true, ms: Date.now() - start };
+  } catch (err) {
+    const msg = (err as Error).message;
+    return { ok: false, ms: null, error: msg === "요청 시간 초과" ? "timeout (5s 초과)" : msg };
+  }
 }
 
 async function executeStatus(ctx: Ctx, client: Client): Promise<void> {
@@ -50,6 +34,7 @@ async function executeStatus(ctx: Ctx, client: Client): Promise<void> {
   const wsPing = client.ws.ping;
   const memMB = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1);
 
+  await ctx.defer();
   const [neis, db] = await Promise.allSettled([
     checkNeis(),
     (async (): Promise<ApiStatus> => {

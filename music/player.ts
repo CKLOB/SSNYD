@@ -92,8 +92,9 @@ async function playNext(guildId: string): Promise<void> {
     gp.ytdlProcess = subprocess;
 
     let stderr = "";
+    // 에러 로그용으로 앞부분만 있으면 되는데, 곡 하나 내내 쌓이면 불필요하게 커진다
     subprocess.stderr?.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
+      if (stderr.length < 2000) stderr += chunk.toString();
     });
     void subprocess.catch((err: unknown) => {
       if (gp.ytdlProcess === subprocess) {

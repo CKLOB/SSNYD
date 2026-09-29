@@ -6,7 +6,17 @@ import {
 } from "discord.js";
 
 const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
-  new SlashCommandBuilder().setName("밥").setDescription("현재 시간대 급식을 확인합니다").toJSON(),
+  new SlashCommandBuilder()
+    .setName("밥")
+    .setDescription("현재 시간대 급식을 확인합니다")
+    .addStringOption((opt) =>
+      opt
+        .setName("설정")
+        .setDescription("급식 기능 on/off (관리자 전용)")
+        .setRequired(false)
+        .addChoices({ name: "on", value: "on" }, { name: "off", value: "off" }),
+    )
+    .toJSON(),
 
   new SlashCommandBuilder()
     .setName("급식")
@@ -25,9 +35,20 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
     .addStringOption((opt) =>
       opt
         .setName("날짜")
-        .setDescription("오늘 또는 내일 (기본: 오늘)")
+        .setDescription("오늘, 내일 또는 모레 (기본: 오늘)")
         .setRequired(false)
-        .addChoices({ name: "오늘", value: "오늘" }, { name: "내일", value: "내일" }),
+        .addChoices(
+          { name: "오늘", value: "오늘" },
+          { name: "내일", value: "내일" },
+          { name: "모레", value: "모레" },
+        ),
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName("특정날짜")
+        .setDescription("조회할 날짜 (예: 10/5, 1005, 2026-10-05) — 입력 시 날짜 선택보다 우선")
+        .setRequired(false)
+        .setMaxLength(10),
     )
     .toJSON(),
 
@@ -242,6 +263,39 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
   new SlashCommandBuilder()
     .setName("알림삭제전체")
     .setDescription("이 서버의 알림을 전체 삭제합니다")
+    .toJSON(),
+
+  new SlashCommandBuilder()
+    .setName("gif등록")
+    .setDescription("키워드에 GIF를 등록합니다")
+    .addStringOption((opt) =>
+      opt
+        .setName("키워드")
+        .setDescription("GIF를 부를 키워드 (예: @충동적 구매@)")
+        .setRequired(true),
+    )
+    .addAttachmentOption((opt) =>
+      opt.setName("파일").setDescription("등록할 GIF 파일").setRequired(false),
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName("주소")
+        .setDescription("GIF 이미지 직링크 (파일을 첨부하지 않을 때)")
+        .setRequired(false),
+    )
+    .toJSON(),
+
+  new SlashCommandBuilder()
+    .setName("gif목록")
+    .setDescription("등록된 GIF 키워드 목록을 확인합니다")
+    .toJSON(),
+
+  new SlashCommandBuilder()
+    .setName("gif삭제")
+    .setDescription("등록된 GIF 키워드를 삭제합니다")
+    .addStringOption((opt) =>
+      opt.setName("키워드").setDescription("삭제할 키워드").setRequired(true),
+    )
     .toJSON(),
 
   new SlashCommandBuilder()

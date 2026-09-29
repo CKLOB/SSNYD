@@ -1,5 +1,5 @@
 import { EmbedBuilder, Message, ChatInputCommandInteraction } from "discord.js";
-import { getWeatherData } from "./cache.js";
+import { getWeatherData, peekWeatherData } from "./cache.js";
 import { Ctx, ctxFromMessage, ctxFromInteraction } from "../ctx.js";
 
 const STATUS_EMOJI: Record<string, string> = {
@@ -10,10 +10,11 @@ const STATUS_EMOJI: Record<string, string> = {
   눈: "❄️",
 };
 const DUST_EMOJI: Record<string, string> = { 좋음: "🟢", 보통: "🟡", 나쁨: "🔴", 매우나쁨: "🟣" };
-const COMMANDS = ["!날씨", "!ㄴㅆ"];
+const COMMANDS = new Set(["!날씨", "!ㄴㅆ"]);
 
 async function executeWeather(ctx: Ctx): Promise<void> {
   try {
+    if (!peekWeatherData()) await ctx.defer();
     const d = await getWeatherData();
     const embed = new EmbedBuilder()
       .setColor(0xff8a00)
@@ -32,7 +33,7 @@ async function executeWeather(ctx: Ctx): Promise<void> {
 }
 
 export async function handleWeather(message: Message): Promise<boolean> {
-  if (!COMMANDS.includes(message.content.trim())) return false;
+  if (!COMMANDS.has(message.content.trim())) return false;
   await executeWeather(ctxFromMessage(message));
   return true;
 }
