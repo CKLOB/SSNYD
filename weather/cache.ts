@@ -25,6 +25,9 @@ const STALE_MAX_MS = 3 * 60 * 60 * 1000;
 let lastGood: { data: WeatherData; at: number } | null = null;
 
 const KMA_TIMEOUT_MS = 8000;
+const AIR_TIMEOUT_MS = 5000;
+// 단기예보는 발표가 통째로 누락되는 날이 있어 3시간씩 최대 이만큼 이전 발표분까지 찾아본다
+const FCST_FALLBACK_STEPS = 4;
 const RESULT_NO_DATA = "03";
 
 // 초단기실황: 매시각 :40 이후 발표
@@ -129,13 +132,15 @@ function fetchKma(url: string): Promise<any> {
   return fetchWithRetry(() => fetchJson(url, KMA_TIMEOUT_MS), 2, "Weather");
 }
 
-// 미세먼지는 부가 정보라 실패해도 날씨 전체를 실패시키지 않는다
+// 미세먼지는 부가 정보라 실패해도 날씨 전체를 실패시키지 않는다.
+// 에어코리아는 응답 없이 매달리는 경우가 잦아서, 재시도 없이 짧게 끊어 날씨 응답을 붙잡지 않게 한다
 async function fetchDust(): Promise<string> {
   try {
-    const air = await fetchKma(
+    const air = await fetchJson(
       `https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty` +
         `?serviceKey=${encodeURIComponent(AIR_KEY!)}&stationName=${encodeURIComponent(AIR_STATION)}` +
         `&dataTerm=DAILY&pageNo=1&numOfRows=1&returnType=json&ver=1.0`,
+      AIR_TIMEOUT_MS,
     );
     if (air?.response?.header?.resultCode !== "00")
       throw new Error(`에어코리아 오류: ${air?.response?.header?.resultMsg ?? "Unknown"}`);
@@ -154,7 +159,6 @@ async function fetchWeather(): Promise<WeatherData> {
 
   const kst = kstNow();
   const ncstBase = ultraSrtBase(kst);
-  const fcstBase = shortFcstBase(kst);
   const todayStr = `${kst.getUTCFullYear()}${String(kst.getUTCMonth() + 1).padStart(2, "0")}${String(kst.getUTCDate()).padStart(2, "0")}`;
   const curHourStr = String(kst.getUTCHours()).padStart(2, "0") + "00";
 
@@ -163,12 +167,24 @@ async function fetchWeather(): Promise<WeatherData> {
     `${KMA}/getUltraSrtNcst?serviceKey=${encodeURIComponent(KMA_KEY)}&pageNo=1&numOfRows=10&dataType=JSON` +
     `&base_date=${base.base_date}&base_time=${base.base_time}&nx=${NX}&ny=${NY}`;
 
+  // 최신 발표분이 NO_DATA면 3시간 전 발표분으로 거슬러 올라간다 (오늘 날짜 예보는 이전 발표분에도 들어 있음)
+  const fetchFcst = async (): Promise<any> => {
+    let res: any;
+    for (let step = 0; step < FCST_FALLBACK_STEPS; step++) {
+      const base = shortFcstBase(new Date(kst.getTime() - step * 3 * 60 * 60 * 1000));
+      res = await fetchKma(
+        `${KMA}/getVilageFcst?serviceKey=${encodeURIComponent(KMA_KEY)}&pageNo=1&numOfRows=500&dataType=JSON` +
+          `&base_date=${base.base_date}&base_time=${base.base_time}&nx=${NX}&ny=${NY}`,
+      );
+      if (res?.response?.header?.resultCode !== RESULT_NO_DATA) break;
+      console.warn(`[Weather] 단기예보 ${base.base_date} ${base.base_time} 발표분 없음`);
+    }
+    return res;
+  };
+
   const [ncstFirst, fcst, dust] = await Promise.all([
     fetchKma(ncstUrl(ncstBase)),
-    fetchKma(
-      `${KMA}/getVilageFcst?serviceKey=${encodeURIComponent(KMA_KEY)}&pageNo=1&numOfRows=500&dataType=JSON` +
-        `&base_date=${fcstBase.base_date}&base_time=${fcstBase.base_time}&nx=${NX}&ny=${NY}`,
-    ),
+    fetchFcst(),
     fetchDust(),
   ]);
 
