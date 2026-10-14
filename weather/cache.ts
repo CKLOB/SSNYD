@@ -1,4 +1,4 @@
-import { kstNow, fetchJson, onEveryKstMinute } from "../utils.js";
+import { kstNow, fetchJson, fetchWithRetry, onEveryKstMinute } from "../utils.js";
 import { TtlCache } from "../cache.js";
 
 const KMA_KEY = process.env.KMA_API_KEY;
@@ -20,6 +20,12 @@ export interface WeatherData {
 const WEATHER_TTL_MS = 40 * 60 * 1000;
 const weatherCache = new TtlCache<WeatherData>(1);
 const WEATHER_KEY = "current";
+// API가 잠깐 죽어 있을 때는 이 시간 안에 받아둔 마지막 정상값으로 대신 답한다
+const STALE_MAX_MS = 3 * 60 * 60 * 1000;
+let lastGood: { data: WeatherData; at: number } | null = null;
+
+const KMA_TIMEOUT_MS = 8000;
+const RESULT_NO_DATA = "03";
 
 // 초단기실황: 매시각 :40 이후 발표
 function ultraSrtBase(kst: Date): { base_date: string; base_time: string } {
@@ -102,10 +108,44 @@ export function peekWeatherData(): WeatherData | undefined {
 }
 
 // 동시에 여러 명이 !날씨를 쳐도 API 3종 호출은 한 번만 나간다
-export function getWeatherData(force = false): Promise<WeatherData> {
-  return force
-    ? weatherCache.load(WEATHER_KEY, fetchWeather, () => WEATHER_TTL_MS)
-    : weatherCache.getOrLoad(WEATHER_KEY, fetchWeather, () => WEATHER_TTL_MS);
+export async function getWeatherData(force = false): Promise<WeatherData> {
+  try {
+    const data = await (force
+      ? weatherCache.load(WEATHER_KEY, fetchWeather, () => WEATHER_TTL_MS)
+      : weatherCache.getOrLoad(WEATHER_KEY, fetchWeather, () => WEATHER_TTL_MS));
+    lastGood = { data, at: Date.now() };
+    return data;
+  } catch (err) {
+    if (lastGood && Date.now() - lastGood.at < STALE_MAX_MS) {
+      console.warn("[Weather] 조회 실패, 이전 값 사용:", (err as Error).message);
+      return lastGood.data;
+    }
+    throw err;
+  }
+}
+
+// data.go.kr은 간헐적으로 느리거나 200 OK에 XML 에러를 돌려주므로 재시도한다
+function fetchKma(url: string): Promise<any> {
+  return fetchWithRetry(() => fetchJson(url, KMA_TIMEOUT_MS), 2, "Weather");
+}
+
+// 미세먼지는 부가 정보라 실패해도 날씨 전체를 실패시키지 않는다
+async function fetchDust(): Promise<string> {
+  try {
+    const air = await fetchKma(
+      `https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty` +
+        `?serviceKey=${encodeURIComponent(AIR_KEY!)}&stationName=${encodeURIComponent(AIR_STATION)}` +
+        `&dataTerm=DAILY&pageNo=1&numOfRows=1&returnType=json&ver=1.0`,
+    );
+    if (air?.response?.header?.resultCode !== "00")
+      throw new Error(`에어코리아 오류: ${air?.response?.header?.resultMsg ?? "Unknown"}`);
+    const airItem = air.response.body.items?.[0];
+    const pm10Raw = parseFloat(airItem?.pm10Value ?? airItem?.pm10Value24);
+    return isNaN(pm10Raw) ? "정보 없음" : toDustLevel(pm10Raw);
+  } catch (err) {
+    console.warn("[Weather] 미세먼지 조회 실패:", (err as Error).message);
+    return "정보 없음";
+  }
 }
 
 async function fetchWeather(): Promise<WeatherData> {
@@ -119,29 +159,28 @@ async function fetchWeather(): Promise<WeatherData> {
   const curHourStr = String(kst.getUTCHours()).padStart(2, "0") + "00";
 
   const KMA = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0";
+  const ncstUrl = (base: { base_date: string; base_time: string }) =>
+    `${KMA}/getUltraSrtNcst?serviceKey=${encodeURIComponent(KMA_KEY)}&pageNo=1&numOfRows=10&dataType=JSON` +
+    `&base_date=${base.base_date}&base_time=${base.base_time}&nx=${NX}&ny=${NY}`;
 
-  const [ncst, fcst, air] = await Promise.all([
-    fetchJson(
-      `${KMA}/getUltraSrtNcst?serviceKey=${encodeURIComponent(KMA_KEY)}&pageNo=1&numOfRows=10&dataType=JSON` +
-        `&base_date=${ncstBase.base_date}&base_time=${ncstBase.base_time}&nx=${NX}&ny=${NY}`,
-    ),
-    fetchJson(
+  const [ncstFirst, fcst, dust] = await Promise.all([
+    fetchKma(ncstUrl(ncstBase)),
+    fetchKma(
       `${KMA}/getVilageFcst?serviceKey=${encodeURIComponent(KMA_KEY)}&pageNo=1&numOfRows=500&dataType=JSON` +
         `&base_date=${fcstBase.base_date}&base_time=${fcstBase.base_time}&nx=${NX}&ny=${NY}`,
     ),
-    fetchJson(
-      `https://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty` +
-        `?serviceKey=${encodeURIComponent(AIR_KEY)}&stationName=${encodeURIComponent(AIR_STATION)}` +
-        `&dataTerm=DAILY&pageNo=1&numOfRows=1&returnType=json&ver=1.0`,
-    ),
+    fetchDust(),
   ]);
+
+  // :40 발표분이 늦게 올라오면 NO_DATA가 오므로 한 시간 전 실황으로 다시 받는다
+  let ncst = ncstFirst;
+  if (ncst?.response?.header?.resultCode === RESULT_NO_DATA)
+    ncst = await fetchKma(ncstUrl(ultraSrtBase(new Date(kst.getTime() - 60 * 60 * 1000))));
 
   if (ncst?.response?.header?.resultCode !== "00")
     throw new Error(`기상청 실황 오류: ${ncst?.response?.header?.resultMsg ?? "Unknown"}`);
   if (fcst?.response?.header?.resultCode !== "00")
     throw new Error(`기상청 예보 오류: ${fcst?.response?.header?.resultMsg ?? "Unknown"}`);
-  if (air?.response?.header?.resultCode !== "00")
-    throw new Error(`에어코리아 오류: ${air?.response?.header?.resultMsg ?? "Unknown"}`);
 
   // 초단기실황
   const ncstItems: any[] = ncst.response.body.items?.item ?? [];
@@ -176,17 +215,13 @@ async function fetchWeather(): Promise<WeatherData> {
     temp,
   );
 
-  // 에어코리아 PM10
-  const airItem = air.response.body.items?.[0];
-  const pm10Raw = parseFloat(airItem?.pm10Value ?? airItem?.pm10Value24 ?? "50");
-
   return {
     temp,
     feels_like: calcFeelsLike(temp, wsd, reh),
     status: toStatus(sky, ptyNow || ptyFcst),
     temp_max: tempMax,
     temp_min: tempMin,
-    dust: toDustLevel(isNaN(pm10Raw) ? 50 : pm10Raw),
+    dust,
   };
 }
 
