@@ -27,11 +27,7 @@ const ATPT_CODE = "F10";
 // 2026년 전남광주통합특별시교육청 개편으로 NEIS 학교코드가 7380292 -> 7140392로 변경됨
 const SCHOOL_CODE = "7140392";
 
-async function fetchWithRetry<T>(
-  fn: () => Promise<T>,
-  maxRetries = 2,
-  label = "NEIS",
-): Promise<T> {
+async function fetchWithRetry<T>(fn: () => Promise<T>, maxRetries = 2, label = "NEIS"): Promise<T> {
   let lastErr: unknown;
   for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
     try {
