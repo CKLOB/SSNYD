@@ -9,7 +9,13 @@ const STATUS_EMOJI: Record<string, string> = {
   비: "🌧️",
   눈: "❄️",
 };
-const DUST_EMOJI: Record<string, string> = { 좋음: "🟢", 보통: "🟡", 나쁨: "🔴", 매우나쁨: "🟣" };
+const DUST_EMOJI: Record<string, string> = {
+  좋음: "🟢",
+  보통: "🟡",
+  나쁨: "🔴",
+  매우나쁨: "🟣",
+  "정보 없음": "⚪",
+};
 const COMMANDS = new Set(["!날씨", "!ㄴㅆ"]);
 
 async function executeWeather(ctx: Ctx): Promise<void> {
