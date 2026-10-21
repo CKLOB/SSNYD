@@ -29,15 +29,19 @@ export interface SpotifySearchResponse {
 const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 
-if (!CLIENT_ID || !CLIENT_SECRET) {
-  throw new Error("SPOTIFY_CLIENT_ID 또는 SPOTIFY_CLIENT_SECRET 환경 변수가 설정되지 않았습니다.");
-}
+// 키가 없다고 import 시점에 던지면 봇 전체가 부팅 단계에서 죽는다. Spotify 명령을 쓸 때만 실패하게 한다.
+const TIMEOUT_MS = 8000;
 
 let cachedToken: string | null = null;
 let tokenExpiresAt = 0;
 
 async function getToken(): Promise<string> {
   if (cachedToken && Date.now() < tokenExpiresAt) return cachedToken;
+  if (!CLIENT_ID || !CLIENT_SECRET) {
+    throw new Error(
+      "SPOTIFY_CLIENT_ID 또는 SPOTIFY_CLIENT_SECRET 환경 변수가 설정되지 않았습니다.",
+    );
+  }
 
   const credentials = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64");
 
@@ -48,6 +52,7 @@ async function getToken(): Promise<string> {
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: "grant_type=client_credentials",
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -85,6 +90,7 @@ export async function searchTracks(
 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
   });
 
   if (!res.ok) {

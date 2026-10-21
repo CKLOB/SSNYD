@@ -450,6 +450,10 @@ async function deleteGifTrigger(guildId: string, keyword: string): Promise<boole
   return result.affectedRows > 0;
 }
 
+async function close(): Promise<void> {
+  await pool.end();
+}
+
 async function ping(): Promise<number> {
   const start = Date.now();
   await pool.execute("SELECT 1");
@@ -458,6 +462,7 @@ async function ping(): Promise<number> {
 
 export {
   init,
+  close,
   ping,
   getUser,
   getBalance,

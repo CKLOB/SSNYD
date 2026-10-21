@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { writeFileSync } from "fs";
 import {
   Client,
   Events,
@@ -13,10 +14,11 @@ import { handleCasino, handleButtonInteraction, handleCasinoSlash } from "./casi
 import { handleMeal, handleMealSlash, initMealCacheWarmer } from "./meal/handler.js";
 import { handleScheduler, initScheduler, handleSchedulerSlash } from "./scheduler/handler.js";
 import { handleTimetable, handleTimetableSlash } from "./timetable/handler.js";
-import { init as initDb } from "./db.js";
+import { init as initDb, close as closeDb } from "./db.js";
 import { handleRandom } from "./random/handler.js";
 import { handleGif, handleGifSlash, initGifCache } from "./gif/handler.js";
 import { handleMusic, handleMusicSlash } from "./music/handler.js";
+import { stopAll as stopAllMusic } from "./music/player.js";
 import { handleStatus, handleStatusSlash } from "./status/handler.js";
 import { handleAcademic, handleAcademicSlash } from "./academic/handler.js";
 import { handleWeather, handleWeatherSlash } from "./weather/handler.js";
@@ -174,13 +176,30 @@ const client = new Client({
   },
 });
 
+const DB_CONNECT_ATTEMPTS = 5;
+
+async function connectDbWithRetry(): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await initDb();
+      return;
+    } catch (e) {
+      if (attempt >= DB_CONNECT_ATTEMPTS) throw e;
+      console.warn(`DB 연결 재시도 ${attempt}/${DB_CONNECT_ATTEMPTS} — ${(e as Error).message}`);
+      await new Promise((r) => setTimeout(r, attempt * 3000));
+    }
+  }
+}
+
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Ready! Logged in as ${readyClient.user.tag}`);
+  // DB 없이는 대부분의 명령이 동작하지 않는다. 부팅 직후 DB가 아직 안 올라온 경우를 위해 몇 번 재시도하고,
+  // 그래도 안 되면 반쯤 죽은 채로 떠 있지 말고 종료해서 컨테이너 재시작(restart: always)에 맡긴다.
   try {
-    await initDb();
+    await connectDbWithRetry();
   } catch (e) {
-    console.error("DB 연결 실패:", (e as Error).message);
-    return;
+    console.error("DB 연결 실패, 종료합니다:", (e as Error).message);
+    process.exit(1);
   }
 
   initMealCacheWarmer();
@@ -197,21 +216,66 @@ client.once(Events.ClientReady, async (readyClient) => {
   }
 });
 
+// 게이트웨이 연결이 끊겼다 붙는 건 discord.js가 알아서 복구한다. 원인 파악용으로 로그만 남긴다.
+client.on(Events.Error, (err) => console.error("[Client]", err));
+client.on(Events.Warn, (msg) => console.warn("[Client]", msg));
+client.on(Events.ShardDisconnect, (event, id) =>
+  console.warn(`[Shard ${id}] 연결 끊김 (code ${event.code})`),
+);
+client.on(Events.ShardReconnecting, (id) => console.warn(`[Shard ${id}] 재연결 중`));
+client.on(Events.ShardResume, (id) => console.log(`[Shard ${id}] 세션 복구`));
+
+// 게이트웨이가 끊긴 채 오래 복구되지 않으면 프로세스를 재시작시킨다 (discord.js 자동 재연결이 먼저 시도된다).
+// 정상일 때는 HEALTHCHECK가 볼 파일을 갱신한다.
+const HEALTH_FILE = "/tmp/ssnyd-healthy";
+const WATCHDOG_INTERVAL_MS = 30_000;
+const MAX_DOWN_MS = 5 * 60 * 1000;
+let downSince: number | null = null;
+
+setInterval(() => {
+  if (client.isReady()) {
+    downSince = null;
+    try {
+      writeFileSync(HEALTH_FILE, String(Date.now()));
+    } catch (_) {}
+    return;
+  }
+  // 로그인 전(부팅 중)에는 판단하지 않는다
+  if (!client.readyAt) return;
+  downSince ??= Date.now();
+  if (Date.now() - downSince > MAX_DOWN_MS) {
+    console.error("[Watchdog] 게이트웨이 연결이 5분 넘게 복구되지 않아 재시작합니다.");
+    void shutdown(1);
+  }
+}, WATCHDOG_INTERVAL_MS).unref();
+
 let shuttingDown = false;
-async function shutdown(): Promise<void> {
+async function shutdown(exitCode = 0): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
+  // 어느 단계가 매달려도 종료는 반드시 되도록 상한을 둔다 (compose 기본 stop 대기 10초보다 짧게)
+  const forceExit = setTimeout(() => process.exit(exitCode), 8000);
+  forceExit.unref();
+  stopAllMusic();
   await sendBotStatus("offline");
-  process.exit(0);
+  await client.destroy();
+  await closeDb().catch(() => {});
+  process.exit(exitCode);
 }
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+process.on("SIGINT", () => void shutdown());
+process.on("SIGTERM", () => void shutdown());
 
 // 핸들러 곳곳에서 await 없이 보내는 답장이 실패(권한 없음, 메시지 삭제됨 등)하면 unhandled rejection이 되고,
 // Node 기본 설정에서는 그 한 번으로 봇 프로세스 전체가 죽는다. 로그만 남기고 계속 돌게 한다.
 process.on("unhandledRejection", (reason) => {
   console.error("[unhandledRejection]", reason);
+});
+
+// 동기 예외는 프로세스 상태를 믿을 수 없으므로 정리하고 종료해 재시작시킨다
+process.on("uncaughtException", (err) => {
+  console.error("[uncaughtException]", err);
+  void shutdown(1);
 });
 
 type SlashHandler = (i: ChatInputCommandInteraction) => Promise<void>;
@@ -264,10 +328,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await SLASH_HANDLERS[interaction.commandName]?.(interaction);
   } catch (err) {
     console.error(`[Interaction] ${interaction.isCommand() ? interaction.commandName : ""}`, err);
-    if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-      await interaction
-        .reply({ content: "❌ 처리 중 오류가 발생했습니다.", flags: MessageFlags.Ephemeral })
-        .catch(() => {});
+    if (interaction.isRepliable()) {
+      const content = "❌ 처리 중 오류가 발생했습니다.";
+      // deferReply만 해 두고 실패하면 사용자에게 "생각 중..."이 계속 남으므로 그 응답을 오류로 채운다
+      if (interaction.deferred && !interaction.replied) {
+        await interaction.editReply({ content }).catch(() => {});
+      } else if (!interaction.replied) {
+        await interaction.reply({ content, flags: MessageFlags.Ephemeral }).catch(() => {});
+      }
     }
   }
 });
@@ -308,4 +376,11 @@ client.on(Events.MessageCreate, async (message) => {
   }
 });
 
-client.login(token);
+if (!token) {
+  console.error("DISCORD_TOKEN 환경변수가 없습니다.");
+  process.exit(1);
+}
+client.login(token).catch((err) => {
+  console.error("로그인 실패:", err);
+  process.exit(1);
+});

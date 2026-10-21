@@ -223,6 +223,11 @@ export function stop(guildId: string): boolean {
   return true;
 }
 
+// 종료 시 yt-dlp 자식 프로세스와 음성 연결이 남지 않게 전부 정리한다
+export function stopAll(): void {
+  for (const guildId of [...players.keys()]) stop(guildId);
+}
+
 export function pause(guildId: string): boolean {
   const gp = players.get(guildId);
   if (!gp || gp.current === null) return false;
