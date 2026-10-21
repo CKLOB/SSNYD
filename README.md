@@ -1,6 +1,6 @@
 # 🤖 SSNYD — 섹시노예들 디스코드 봇
 
-> 학교 생활을 더 편하고 재미있게 만들어주는 GSM 디스코드 봇
+> 학교 생활을 더 편하고 재미있게 만들어주는 디스코드 봇
 
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-brightgreen)](https://nodejs.org/)
 [![discord.js](https://img.shields.io/badge/discord.js-v14-5865F2)](https://discord.js.org/)
@@ -10,7 +10,7 @@
 
 ## 📖 소개
 
-**SSNYD**는 GSM 디스코드 서버를 위해 만들어진 다목적 봇입니다.  
+**SSNYD**는 디스코드 서버를 위해 만들어진 다목적 봇입니다.  
 급식·시간표·학사일정 같은 학교 정보 조회부터, 가상 화폐 경제 시스템, 카지노 미니게임, 음악 추천, 날씨/미세먼지까지 — 학교생활에 필요한 모든 것을 하나의 봇으로 해결합니다.
 
 ---
