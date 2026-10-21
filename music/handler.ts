@@ -1,7 +1,7 @@
 import { AudioPlayerStatus } from "@discordjs/voice";
 import { EmbedBuilder, Message, ChatInputCommandInteraction } from "discord.js";
 import play from "play-dl";
-import { searchTracks, SpotifyTrack } from "./spotify.js";
+import { searchTracks, DeezerTrack } from "./deezer.js";
 import {
   addToQueue,
   getPlayerStatus,
@@ -14,35 +14,25 @@ import {
 } from "./player.js";
 import { Ctx, ctxFromMessage, ctxFromInteraction } from "../ctx.js";
 
-// ─── Spotify 추천 (기존 기능 유지) ─────────────────────────────────────────
+// ─── 노래 추천 / 검색 (Deezer) ──────────────────────────────────────────────
 
-function buildTrackEmbed(track: SpotifyTrack, title: string, color: number): EmbedBuilder {
-  const artists = track.artists.map((a) => a.name).join(", ");
-  const albumArt = track.album?.images?.[0]?.url;
-  const spotifyUrl = track.external_urls?.spotify;
-  const preview = track.preview_url;
-
+function buildTrackEmbed(track: DeezerTrack, title: string, color: number): EmbedBuilder {
   const embed = new EmbedBuilder()
     .setColor(color)
     .setTitle(title)
     .addFields(
-      { name: "🎵 제목", value: track.name.trim().slice(0, 1024), inline: true },
-      { name: "🎤 아티스트", value: artists.trim().slice(0, 1024), inline: true },
+      { name: "🎵 제목", value: track.title.trim().slice(0, 1024), inline: true },
+      { name: "🎤 아티스트", value: track.artist.name.trim().slice(0, 1024), inline: true },
       {
         name: "💿 앨범",
-        value: (track.album?.name ?? "알 수 없음").trim().slice(0, 1024),
+        value: (track.album?.title ?? "알 수 없음").trim().slice(0, 1024),
         inline: false,
       },
-    );
+    )
+    .setFooter({ text: "🔗 제목을 클릭하면 Deezer에서 열립니다" });
 
-  if (albumArt) embed.setThumbnail(albumArt);
-  if (spotifyUrl) embed.setURL(spotifyUrl);
-  if (preview)
-    embed.setFooter({
-      text: "🔗 제목을 클릭하면 Spotify에서 열립니다 | 미리듣기: " + preview,
-    });
-  else embed.setFooter({ text: "🔗 제목을 클릭하면 Spotify에서 열립니다" });
-
+  if (track.album?.cover_big) embed.setThumbnail(track.album.cover_big);
+  if (track.link) embed.setURL(track.link);
   return embed;
 }
 
@@ -118,16 +108,18 @@ const RECOMMEND_CMDS = ["!노추", "!오노추"] as const;
 
 const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
-// ─── Spotify 추천 / 검색 ────────────────────────────────────────────────────
+// ─── 추천 / 검색 ────────────────────────────────────────────────────
 
 async function executeRecommend(ctx: Ctx, genreInput: string | null): Promise<void> {
   const genreKey = genreInput ?? pick(GENRE_LIST);
   await ctx.defer();
   try {
     const artist = pick(GENRE_ARTISTS[genreKey]);
-    const data = await searchTracks(`artist:"${artist}"`, 10, 0);
-    const tracks = data.tracks?.items;
-    if (!tracks || tracks.length === 0) {
+    const found = await searchTracks(artist, 25);
+    // 다른 가수의 피처링 곡이 섞여 나오므로 해당 아티스트 곡이 있으면 그것만 쓴다
+    const own = found.filter((t) => t.artist.name.toLowerCase().includes(artist.toLowerCase()));
+    const tracks = own.length > 0 ? own : found;
+    if (tracks.length === 0) {
       await ctx.reply("😢 추천 곡을 찾지 못했습니다. 다시 시도해보세요.");
       return;
     }
@@ -135,16 +127,15 @@ async function executeRecommend(ctx: Ctx, genreInput: string | null): Promise<vo
     await ctx.reply({ embeds: [buildTrackEmbed(pick(tracks), `🎧 ${label} 추천 노래`, 0x1db954)] });
   } catch (err) {
     console.error(err);
-    await ctx.reply("❌ Spotify API 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+    await ctx.reply("❌ 음악 검색 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
   }
 }
 
 async function executeArtistSearch(ctx: Ctx, query: string): Promise<void> {
   await ctx.defer();
   try {
-    const data = await searchTracks(query, 10);
-    const tracks = data.tracks?.items;
-    if (!tracks || tracks.length === 0) {
+    const tracks = await searchTracks(query, 10);
+    if (tracks.length === 0) {
       await ctx.reply(`😢 **${query}** 검색 결과가 없습니다.`);
       return;
     }
@@ -154,7 +145,7 @@ async function executeArtistSearch(ctx: Ctx, query: string): Promise<void> {
     });
   } catch (err) {
     console.error(err);
-    await ctx.reply("❌ Spotify API 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+    await ctx.reply("❌ 음악 검색 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
   }
 }
 
