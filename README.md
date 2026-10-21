@@ -24,7 +24,7 @@
 | 📆 학사일정 | 당월 및 특정 월의 학교 행사·일정 조회                                     |
 | 💰 경제     | 출석 보상, 노동, 잔액 확인, 송금, 지원금, 랭킹 등 서버별 독립 경제 시스템 |
 | 🎰 도박     | 코인플립·블랙잭·바카라·룰렛 — 디스코드 버튼 기반 인터랙티브 미니게임      |
-| 🎵 음악     | Spotify API 연동 노래 추천 (장르별) 및 아티스트/곡 검색                   |
+| 🎵 음악     | Deezer API 연동 노래 추천 (장르별) 및 아티스트/곡 검색                    |
 | 🌤️ 날씨     | KMA·에어코리아 API 기반 현재 기온, 체감온도, 미세먼지(PM10) 표시          |
 | ⏰ 알림     | 특정 채널에 원하는 시간마다 메시지를 자동 전송하는 스케줄러               |
 | 📊 상태     | 봇 업타임, 핑, 메모리, DB·NEIS API 연결 상태 실시간 확인                  |
@@ -46,7 +46,7 @@ SSNYD/
 ├── casino/               # 경제 시스템 + 카지노 게임
 │   ├── economy.js        #   출석, 노동, 잔액, 송금, 랭킹
 │   └── games/            #   코인플립, 블랙잭, 바카라, 룰렛
-├── music/                # 음악 추천 (Spotify API)
+├── music/                # 음악 추천 (Deezer API)
 ├── weather/              # 날씨·미세먼지 (KMA, AirKorea)
 ├── scheduler/            # 자동 메시지 스케줄러
 └── status/               # 봇 상태 확인
@@ -145,7 +145,7 @@ SSNYD/
 - **데이터베이스**: MariaDB (커넥션 풀)
 - **외부 API**:
   - 🏫 [NEIS API](https://open.neis.go.kr/) — 급식, 시간표, 학사일정
-  - 🎵 [Spotify Web API](https://developer.spotify.com/) — 음악 추천 및 검색
+  - 🎵 [Deezer API](https://developers.deezer.com/api) — 음악 추천 및 검색
   - 🌤️ [기상청 KMA API](https://www.data.go.kr/) — 날씨 정보
   - 💨 [에어코리아 API](https://www.airkorea.or.kr/) — 미세먼지 정보
 - **코드 품질**: ESLint + Prettier

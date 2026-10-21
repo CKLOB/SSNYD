@@ -181,7 +181,7 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
 
   new SlashCommandBuilder()
     .setName("노추")
-    .setDescription("Spotify 랜덤 노래 추천")
+    .setDescription("랜덤 노래 추천")
     .addStringOption((opt) =>
       opt
         .setName("장르")
@@ -201,7 +201,7 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
 
   new SlashCommandBuilder()
     .setName("가수")
-    .setDescription("Spotify에서 노래/아티스트를 검색합니다")
+    .setDescription("노래/아티스트를 검색합니다")
     .addStringOption((opt) =>
       opt.setName("검색어").setDescription("검색할 노래 또는 아티스트").setRequired(true),
     )
