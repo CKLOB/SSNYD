@@ -3,6 +3,11 @@ services:
     image: mariadb:10.6
     container_name: ssnyd-mysql
     restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -27,6 +32,13 @@ services:
         condition: service_healthy
     env_file:
       - .env
+    stop_grace_period: 15s
+    # 로그 파일이 무한히 커져 디스크를 채우지 않게 한다
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     volumes:
       - ssnyd_bot_data:/data
 
