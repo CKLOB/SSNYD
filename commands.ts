@@ -68,6 +68,14 @@ const commands: RESTPostAPIApplicationCommandsJSONBody[] = [
     .setDescription("학사일정을 확인합니다")
     .addIntegerOption((opt) =>
       opt
+        .setName("년")
+        .setDescription("조회할 연도 (예: 2027). 없으면 올해")
+        .setRequired(false)
+        .setMinValue(2000)
+        .setMaxValue(2100),
+    )
+    .addIntegerOption((opt) =>
+      opt
         .setName("월")
         .setDescription("조회할 월 (1~12). 없으면 이번 달")
         .setRequired(false)
