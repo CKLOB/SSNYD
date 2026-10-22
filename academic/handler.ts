@@ -99,26 +99,39 @@ async function executeAcademic(ctx: Ctx, year: number, month: number): Promise<v
   }
 }
 
+const USAGE =
+  "올바른 형식으로 입력해줘! (예: `!학사일정`, `!학사일정 4월`, `!학사일정 2027-1`, `!2027년 1월 학사일정`)";
+
+// "4월", "4", "2027-1", "2027년 1월", "2027.01" 형태를 파싱. 연도가 없으면 year는 null.
+function parseYearMonth(spec: string): { year: number | null; month: number } | null {
+  const m = spec.match(/^(?:(\d{4})\s*(?:년|[-./])\s*)?(\d{1,2})\s*월?$/);
+  if (!m) return null;
+  return { year: m[1] ? parseInt(m[1], 10) : null, month: parseInt(m[2], 10) };
+}
+
 export async function handleAcademic(message: Message): Promise<boolean> {
   const content = message.content.trim();
-  if (!content.startsWith("!학사일정")) return false;
+  // "!학사일정 [연월]" 또는 "![연월] 학사일정"
+  const m = content.match(/^!\s*학사일정(?:\s+(.+))?$/) ?? content.match(/^!\s*(.+?)\s+학사일정$/);
+  if (!m) return false;
 
   const now = kstNow();
   let year = now.getUTCFullYear();
   let month = now.getUTCMonth() + 1;
 
-  const rest = content.slice("!학사일정".length).trim();
+  const rest = m[1]?.trim();
   if (rest) {
-    const match = rest.match(/^(\d{1,2})월?$/);
-    if (!match) {
-      await message.reply("올바른 형식으로 입력해줘! (예: `!학사일정` 또는 `!학사일정 4월`)");
+    const parsed = parseYearMonth(rest);
+    if (!parsed) {
+      await message.reply(USAGE);
       return true;
     }
-    month = parseInt(match[1], 10);
-    if (month < 1 || month > 12) {
+    if (parsed.month < 1 || parsed.month > 12) {
       await message.reply("1~12 사이의 달을 입력해줘!");
       return true;
     }
+    month = parsed.month;
+    if (parsed.year !== null) year = parsed.year;
   }
 
   await executeAcademic(ctxFromMessage(message), year, month);
@@ -127,7 +140,7 @@ export async function handleAcademic(message: Message): Promise<boolean> {
 
 export async function handleAcademicSlash(interaction: ChatInputCommandInteraction): Promise<void> {
   const now = kstNow();
-  const year = now.getUTCFullYear();
+  const year = interaction.options.getInteger("년") ?? now.getUTCFullYear();
   const month = interaction.options.getInteger("월") ?? now.getUTCMonth() + 1;
   await executeAcademic(ctxFromInteraction(interaction), year, month);
 }
